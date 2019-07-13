@@ -1,10 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/info.dart';
 import 'package:reader_flutter/page/read.dart';
+import 'package:reader_flutter/page/read_local.dart';
 import 'package:reader_flutter/util/constants.dart';
 import 'package:reader_flutter/util/http_manager.dart';
+import 'package:file_picker/file_picker.dart';
 
 class BookShelf extends StatefulWidget {
   @override
@@ -181,6 +184,35 @@ class _BookShelfState extends State<BookShelf>
     });
   }
 
+  PopupMenuItem<String> _buildPopupMenuItem(String path, String text) {
+    return new PopupMenuItem<String>(
+      value: path,
+      child: Row(children: <Widget>[
+        Padding(
+            padding: EdgeInsets.fromLTRB(0.0, 0.0, 8.0, 0.0),
+            child: Icon(Icons.add)),
+        Text(text)
+      ]),
+    );
+  }
+
+  void getFilePath() async {
+    try {
+      String filePath = await FilePicker.getFilePath(
+          type: FileType.CUSTOM, fileExtension: 'txt');
+      if (filePath == '') {
+        return;
+      }
+      print(filePath);
+      Navigator.push(context,
+            MaterialPageRoute(builder: (BuildContext context) {
+          return ReadPageLocal(filePath);
+        }));
+    } on PlatformException catch (e) {
+      print("Error while picking file");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,6 +224,23 @@ class _BookShelfState extends State<BookShelf>
             icon: Icon(MyIcons.searchIcon),
             onPressed: () {
               Navigator.of(context).pushNamed('/search');
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.list),
+            onPressed: () async {
+              final result = await showMenu(
+                context: context,
+                position: RelativeRect.fromLTRB(1000.0, 80.0, 0.0, 0.0),
+                items: <PopupMenuItem<String>>[
+                  _buildPopupMenuItem('/import', '导入图书'),
+                ],
+              );
+              switch (result) {
+                case '/import':
+                  getFilePath();
+                  break;
+              }
             },
           ),
         ],
