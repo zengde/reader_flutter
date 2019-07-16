@@ -56,7 +56,7 @@ class _BookShelfState extends State<BookShelf>
       onTap: () {
         Navigator.push(context,
             MaterialPageRoute(builder: (BuildContext context) {
-          return ReadPage(book.id);
+          return book.isLocal ? ReadPage(book.id) : ReadPageLocal(book.path);
         }));
       },
       highlightColor: Colors.black12,
@@ -67,12 +67,19 @@ class _BookShelfState extends State<BookShelf>
           children: <Widget>[
             ClipRRect(
               borderRadius: BorderRadius.circular(2.0),
-              child: CachedNetworkImage(
-                fit: BoxFit.cover,
-                imageUrl: book.img,
-                width: 80,
-                height: 100,
-              ),
+              child: book.isLocal
+                  ? Image.asset(
+                      'images/cover_txt.png',
+                      fit: BoxFit.cover,
+                      width: 80,
+                      height: 100,
+                    )
+                  : CachedNetworkImage(
+                      fit: BoxFit.cover,
+                      imageUrl: book.img,
+                      width: 80,
+                      height: 100,
+                    ),
             ),
             Expanded(
               child: Container(
@@ -132,7 +139,16 @@ class _BookShelfState extends State<BookShelf>
         context: context,
         builder: (_) => new AlertDialog(
                 title: new Text("提示"),
-                content: new Text("是否删除 ${book.name}?"),
+                content: new Column(
+                  children: <Widget>[
+                    new Text("是否删除 ${book.name}?"),
+                    book.isLocal? CheckboxListTile(
+                      title:Text("是否同时删除本地文件?") ,
+                      value: true,
+                      onChanged: (val){},
+                    ):Container(),
+                  ],
+                ),
                 actions: <Widget>[
                   new FlatButton(
                     child: new Text("返回"),
@@ -155,7 +171,7 @@ class _BookShelfState extends State<BookShelf>
 
   Future<void> _onRefresh() async {
     _books.forEach((book) {
-      _getInfoData(book.id);
+      if (!book.isLocal) _getInfoData(book.id);
     });
     return;
   }
@@ -205,9 +221,9 @@ class _BookShelfState extends State<BookShelf>
       }
       print(filePath);
       Navigator.push(context,
-            MaterialPageRoute(builder: (BuildContext context) {
-          return ReadPageLocal(filePath);
-        }));
+          MaterialPageRoute(builder: (BuildContext context) {
+        return ReadPageLocal(filePath);
+      }));
     } on PlatformException catch (e) {
       print("Error while picking file");
     }

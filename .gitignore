@@ -7,6 +7,8 @@
 
 # Java class files
 *.class
+*.classpath
+*.project
 
 # Generated files
 bin/
@@ -65,3 +67,13 @@ fastlane/test_output
 fastlane/readme.md
 
 key.properties
+.flutter-plugins
+.metadata
+.packages
+.vscode/settings.json
+.metadata
+.idea/
+.settings/
+debug/
+profile/
+*.lock

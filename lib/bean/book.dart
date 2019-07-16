@@ -45,6 +45,7 @@ final String columnLastChapter = 'LastChapter';
 final String columnCName = 'CName';
 final String columnUpdateTime = 'UpdateTime';
 final String columnPosition = 'Positon';
+final String columnPath = 'Path';
 
 class Book {
   int id;
@@ -58,6 +59,8 @@ class Book {
   String lastChapter;
   String cname;
   String updateTime;
+  String path;
+  bool isLocal;
 
   static Book fromMap(Map<String, dynamic> map) {
     if (map == null) return null;
@@ -73,6 +76,8 @@ class Book {
     book.lastChapter = map['LastChapter'] ?? "";
     book.cname = map['CName'] ?? "";
     book.updateTime = map['UpdateTime'] ?? "";
+    book.path = map['Path'] ?? "";
+    book.isLocal=book.path=='';
     return book;
   }
 
@@ -90,6 +95,7 @@ class Book {
     book.lastChapter = "";
     book.cname = map['CategoryName'] ?? "";
     book.updateTime = "";
+    book.path = map['Path'] ?? "";
     return book;
   }
 
@@ -105,6 +111,7 @@ class Book {
       columnCName: cname,
       columnUpdateTime: updateTime,
       columnPosition: position,
+      columnPath: path,
     };
     if (id != null) {
       map[columnId] = id;
@@ -122,7 +129,7 @@ class BookSqlite {
     String path = join(databasesPath, 'book.db');
 
 //根据数据库文件路径和数据库版本号创建数据库表
-    db = await openDatabase(path, version: 1,
+    db = await openDatabase(path, version: 2,
         onCreate: (Database db, int version) async {
           await db.execute('''
           CREATE TABLE $tableBook (
@@ -138,7 +145,10 @@ class BookSqlite {
             $columnCName TEXT,
             $columnUpdateTime TEXT)
           ''');
-        });
+        },
+        onUpgrade: (Database db, int oldVersion, int newVersion) async {
+          await db.execute("ALTER TABLE $tableBook ADD $columnPath TEXT");
+        }) ;
   }
 
 // 插入一条书籍数据
@@ -161,7 +171,8 @@ class BookSqlite {
       columnLastChapterId,
       columnLastChapter,
       columnCName,
-      columnUpdateTime
+      columnUpdateTime,
+      columnPath
     ]);
 
     if (maps == null || maps.length == 0) {
@@ -189,7 +200,8 @@ class BookSqlite {
           columnLastChapterId,
           columnLastChapter,
           columnCName,
-          columnUpdateTime
+          columnUpdateTime,
+          columnPath
         ],
         where: '$columnId = ?',
         whereArgs: [id]);
@@ -200,7 +212,9 @@ class BookSqlite {
   }
 
   // 根据ID查找书籍信息
-  Future<Book> getBook(int id) async {
+  Future<Book> getBook(int id,{
+    String path,
+  }) async {
     await this.openSqlite();
     List<Map> maps = await db.query(tableBook,
         columns: [
@@ -214,10 +228,11 @@ class BookSqlite {
           columnLastChapterId,
           columnLastChapter,
           columnCName,
-          columnUpdateTime
+          columnUpdateTime,
+          columnPath
         ],
-        where: '$columnId = ?',
-        whereArgs: [id]);
+        where: id>0? '$columnId = ?':'$columnPath=?',
+        whereArgs: id>0? [id]:[path]);
     if (maps.length > 0) {
       return Book.fromMap(maps.first);
     }
