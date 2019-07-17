@@ -54,9 +54,9 @@ class _ReadPageState extends State<ReadPageLocal>
     try {
       String filePath = widget.filePath;
       RegExp volumeExp =
-          RegExp(r'^[\s\t　]*(第?.{1,5}卷|卷\S{1,5})\s*.{0,20}$', unicode: true);
+          RegExp(r'^[\s\t　]*(第?[0-9零一二三四五六七八九十]卷|卷[0-9零一二三四五六七八九十]+)\s*.{0,20}$', unicode: true);
       RegExp chpterExp =
-          RegExp(r'^[\s\t　]*第?.{1,10}[章节回话]\s*.{0,20}$', unicode: true);
+          RegExp(r'^[\s\t　]*第?[0-9零一二三四五六七八九十序百千][章节回话]\s*.{0,20}$', unicode: true);
 
       int k = -1;
       bool iscn = false;
