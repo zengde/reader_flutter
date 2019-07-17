@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:reader_flutter/bean/volume.dart';
 import 'package:reader_flutter/fragment/book_mark.dart';
 import 'package:reader_flutter/fragment/chapter.dart';
+import 'package:reader_flutter/page/read_local.dart';
 
 class CatalogPageLocal extends StatefulWidget {
   @override
@@ -15,7 +16,8 @@ class CatalogPageLocal extends StatefulWidget {
 
   final callBack2;
 
-  CatalogPageLocal(this.bookPath, this._chapters,{this.callBack1, this.callBack2});
+  CatalogPageLocal(this.bookPath, this._chapters,
+      {this.callBack1, this.callBack2});
 }
 
 class _CatalogPageLocalState extends State<CatalogPageLocal>
@@ -36,10 +38,25 @@ class _CatalogPageLocalState extends State<CatalogPageLocal>
     super.dispose();
   }
 
-Widget _chapterText(Chapter chapter) {
+  void change(Chapter chapter) {
+    if (widget.callBack1 != null) {
+      widget.callBack1(chapter);
+      Navigator.pop(context);
+    } else {
+      Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (BuildContext context) {
+        return ReadPageLocal(
+          widget.bookPath,
+          chapter: chapter,
+        );
+      }));
+    }
+  }
+
+  Widget _chapterText(Chapter chapter) {
     return InkWell(
       onTap: () {
-        //change(chapter);
+        change(chapter);
       },
       child: Container(
         padding: EdgeInsets.only(left: 20),
