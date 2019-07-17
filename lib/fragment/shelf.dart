@@ -206,7 +206,7 @@ class _BookShelfState extends State<BookShelf>
       child: Row(children: <Widget>[
         Padding(
             padding: EdgeInsets.fromLTRB(0.0, 0.0, 8.0, 0.0),
-            child: Icon(Icons.add)),
+            child: Icon(Icons.save_alt)),
         Text(text)
       ]),
     );
@@ -243,18 +243,19 @@ class _BookShelfState extends State<BookShelf>
             },
           ),
           IconButton(
-            icon: Icon(Icons.list),
+            icon: Icon(Icons.more_horiz),
             onPressed: () async {
               final result = await showMenu(
                 context: context,
                 position: RelativeRect.fromLTRB(1000.0, 80.0, 0.0, 0.0),
                 items: <PopupMenuItem<String>>[
-                  _buildPopupMenuItem('/import', '导入图书'),
+                  _buildPopupMenuItem('/import', '本地导入'),
                 ],
               );
               switch (result) {
                 case '/import':
-                  getFilePath();
+                  //getFilePath();
+                  Navigator.of(context).pushNamed('/importLocal');
                   break;
               }
             },

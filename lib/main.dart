@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reader_flutter/page/acount.dart';
 import 'package:reader_flutter/page/home.dart';
+import 'package:reader_flutter/page/import_local.dart';
 import 'package:reader_flutter/page/search.dart';
 
 void main() {
@@ -28,6 +29,7 @@ class MyApp extends StatelessWidget {
         '/home': (_) => HomePage(),
         '/acount': (_) => AcountPage(),
         '/search': (_) => SearchPage(),
+        '/importLocal': (_) => ImportLocal()
       },
     );
   }

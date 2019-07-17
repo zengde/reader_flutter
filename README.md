@@ -1,4 +1,5 @@
 #   reader_flutter
+[![Build Status - Travis][0]][1]
 
     下载体验地址：https://www.pgyer.com/CJrf
 #   预览

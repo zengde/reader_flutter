@@ -13,7 +13,7 @@ dependencies:
   flutter_easyrefresh: ^1.2.7
   cupertino_icons: ^0.1.2
   carousel_slider: ^1.3.0
-  cached_network_image: ^0.7.0
+  cached_network_image: ^1.1.0
   adsorptionview_flutter: ^0.1.3
   sqflite: ^1.1.0
   intl: ^0.15.8
@@ -21,6 +21,7 @@ dependencies:
   file_picker: ^1.3.7
   open_file: ^2.0.3
   gbk_codec: ^0.3.1
+  permission_handler: '^3.2.0'
 
 
 dev_dependencies:

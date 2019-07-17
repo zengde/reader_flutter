@@ -68,3 +68,5 @@ class StringConstants {
 }
 
 class DimenConstants {}
+
+const app_path = 'ReaderFlutter';
