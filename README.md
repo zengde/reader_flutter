@@ -1,5 +1,7 @@
 #   reader_flutter
-[![Build Status - Travis][0]][1]
+
+[![Build Status](https://travis-ci.org/zengde/reader_flutter.svg?branch=master)](https://travis-ci.org/zengde/reader_flutter)
+
 
     下载体验地址：https://www.pgyer.com/CJrf
 #   预览
