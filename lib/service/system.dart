@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show required;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:reader_flutter/service/book.dart';
 import 'file.dart';
 
 class SystemService {
@@ -43,20 +44,22 @@ class SystemService {
   bool get isFuchsia => Platform.isFuchsia;
 
   /// Check a [permission] and return a [Future] with the result
-  Future<bool> checkPermission(PermissionGroup permission){
-      Future<PermissionStatus> permissionStatus=PermissionHandler().checkPermissionStatus(permission);
-      return permissionStatus.then((PermissionStatus result)=>result==PermissionStatus.granted);
+  Future<bool> checkPermission(PermissionGroup permission) {
+    Future<PermissionStatus> permissionStatus =
+        PermissionHandler().checkPermissionStatus(permission);
+    return permissionStatus
+        .then((PermissionStatus result) => result == PermissionStatus.granted);
   }
-
 
   /// Request a [permission] and return a [Future] with the result
-  Future<bool> requestPermission(PermissionGroup permission){
+  Future<bool> requestPermission(PermissionGroup permission) {
     List<PermissionGroup> permissions = <PermissionGroup>[permission];
-    Future<Map<PermissionGroup, PermissionStatus>> requestFuture=PermissionHandler().requestPermissions(permissions);
-    return requestFuture
-        .then((Map<PermissionGroup, PermissionStatus> permissionRequestResult) =>permissionRequestResult[permission]==PermissionStatus.granted);
+    Future<Map<PermissionGroup, PermissionStatus>> requestFuture =
+        PermissionHandler().requestPermissions(permissions);
+    return requestFuture.then(
+        (Map<PermissionGroup, PermissionStatus> permissionRequestResult) =>
+            permissionRequestResult[permission] == PermissionStatus.granted);
   }
-      
 
   /// Open app settings on Android and iOs
   Future<bool> openSettings() => PermissionHandler().openAppSettings();
@@ -74,4 +77,12 @@ class SystemService {
     return _fileService;
   }
 
+  BookService _bookService;
+
+  BookService get bookService {
+    if (null == _bookService) {
+      _bookService = new BookService();
+    }
+    return _bookService;
+  }
 }

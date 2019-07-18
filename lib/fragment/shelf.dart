@@ -243,7 +243,7 @@ class _BookShelfState extends State<BookShelf>
             },
           ),
           IconButton(
-            icon: Icon(Icons.more_horiz),
+            icon: Icon(Icons.more_vert),
             onPressed: () async {
               final result = await showMenu(
                 context: context,

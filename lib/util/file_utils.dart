@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:gbk_codec/gbk_codec.dart';
 
 enum FileType {
   TEXT,
@@ -106,7 +109,7 @@ String charsetDetector(RandomAccessFile file) {
     isLatin1 = false;
   } else if (null != bytes && bytes.isNotEmpty) {
     //不带bom头，可能是gbk,latin1,utf8,big5
-    bytes = file.readSync(100 > length ? length : 100);
+    bytes = file.readSync(10 > length ? length : 10);
     int i = 0;
     do {
       if (bytes[i] > 127) {
@@ -124,6 +127,30 @@ String charsetDetector(RandomAccessFile file) {
     charset = 'utf8';
   } else if (isLatin1 && !isUtf8) {
     charset = 'latin1';
+  }
+  return charset;
+}
+
+// 不带bom头 尝试解码判断
+String mcharsetDetector(RandomAccessFile file) {
+  String charset = 'utf8';
+  List<int> bytes = file.readSync(120);
+  if (null != bytes &&
+      bytes.length >= 3 &&
+      bytes[0] == 0xEF &&
+      bytes[1] == 0xBB &&
+      bytes[2] == 0xBF) {
+    charset = 'utf8';
+  } else if (null != bytes && bytes.isNotEmpty) {
+    try {
+      String str = utf8.decode(bytes);
+      //print(str);
+      charset = 'utf8';
+    } catch (err) {
+      String str = gbk_bytes.decode(bytes);
+      //print(str);
+      charset = 'gbk';
+    }
   }
   return charset;
 }

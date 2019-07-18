@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/service/system.dart';
 import 'package:reader_flutter/util/file_utils.dart';
 import 'package:reader_flutter/view/file_item.dart';
-
 
 class ImportLocal extends StatefulWidget {
   @override
@@ -32,7 +32,8 @@ class _ImportLocalState extends State<ImportLocal> {
 
   Directory currentDirectory;
 
-  bool initial=false;
+  bool initial = false;
+  final BookSqlite bookSqlite = BookSqlite();
 
   /// get entities in this path
   void resolvePath(FileSystemEntity directory,
@@ -101,6 +102,8 @@ class _ImportLocalState extends State<ImportLocal> {
       if (FileSystemEntity.isDirectorySync(file.path)) {
         resolvePath(file);
       } else {
+        selectMode = true;
+        update(file);
         print('点击的是文件');
       }
     }
@@ -187,7 +190,7 @@ class _ImportLocalState extends State<ImportLocal> {
         FileType.DIRECTORY != selectedType &&
         selectedList.length > 0) {
       print('import ${selectedList.length} books.');
-      int count = 0;//await service.bookService.importLocalBooks(selectedList);
+      int count = await service.bookService.importLocalBooks(selectedList,bookSqlite);
       print('refresh shelf');
       service.send(['refreshShelf']);
       showDialog<bool>(
@@ -338,46 +341,49 @@ class _ImportLocalState extends State<ImportLocal> {
   @override
   void initState() {
     super.initState();
-    
+
     getExternalStorageDirectory().then((Directory directory) {
-      service.fileService.rootDirectory=directory;
-      initial=true;
+      service.fileService.rootDirectory = directory;
+      initial = true;
       resolvePath(directory);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return initial? new Scaffold(
-        appBar: new AppBar(
-          title: new Text('导入本地书籍'),
-          actions: <Widget>[
-            new SizedBox(
-              width: 70.0,
-              child: new FlatButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: handleScan,
-                  textColor: Theme.of(context).buttonColor,
-                  child: new Text(!scanned ? '扫描' : '返回')),
-            )
-          ],
-        ),
-        body: new Column(
-          children: <Widget>[
-            buildPathBar(),
-            new Expanded(
-              child: buildContent(),
+    return initial
+        ? new Scaffold(
+            appBar: new AppBar(
+              title: new Text('导入本地书籍'),
+              actions: <Widget>[
+                new SizedBox(
+                  width: 70.0,
+                  child: new FlatButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: handleScan,
+                      textColor: Theme.of(context).buttonColor,
+                      child: new Text(!scanned ? '扫描' : '返回')),
+                )
+              ],
             ),
-            new Offstage(
-              offstage: !selectMode,
-              child: buildBottomBar(),
-            )
-          ],
-        )):new Container();
+            body: new Column(
+              children: <Widget>[
+                buildPathBar(),
+                new Expanded(
+                  child: buildContent(),
+                ),
+                new Offstage(
+                  offstage: !selectMode,
+                  child: buildBottomBar(),
+                )
+              ],
+            ))
+        : new Container();
   }
 
   @override
   void dispose() {
+    bookSqlite.close();
     super.dispose();
   }
 }

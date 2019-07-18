@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:path/path.dart';
+import 'package:reader_flutter/util/file_utils.dart';
 import 'package:reader_flutter/util/util.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -61,6 +64,7 @@ class Book {
   String updateTime;
   String path;
   bool isLocal;
+  String charset;
 
   static Book fromMap(Map<String, dynamic> map) {
     if (map == null) return null;
@@ -77,7 +81,8 @@ class Book {
     book.cname = map['CName'] ?? "";
     book.updateTime = map['UpdateTime'] ?? "";
     book.path = map['Path'] ?? "";
-    book.isLocal=book.path=='';
+    book.charset = map['Charset'] ?? "";
+    book.isLocal = book.path == '';
     return book;
   }
 
@@ -96,6 +101,21 @@ class Book {
     book.cname = map['CategoryName'] ?? "";
     book.updateTime = "";
     book.path = map['Path'] ?? "";
+    return book;
+  }
+
+  static Book fromFile(FileSystemEntity file) {
+    if (file == null) return null;
+    Book book;
+    if (!FileSystemEntity.isDirectorySync(file.path)) {
+      book = new Book();
+      book.name = getFileBaseName(file);
+      book.path = file.path;
+      book.updateTime =new DateTime.now().toIso8601String();
+      book.isLocal=true;
+      if (file is File) book.charset = mcharsetDetector(file.openSync());
+      print(book.charset);
+    }
     return book;
   }
 
@@ -131,7 +151,7 @@ class BookSqlite {
 //根据数据库文件路径和数据库版本号创建数据库表
     db = await openDatabase(path, version: 2,
         onCreate: (Database db, int version) async {
-          await db.execute('''
+      await db.execute('''
           CREATE TABLE $tableBook (
             $columnId INTEGER PRIMARY KEY, 
             $columnPosition INTEGER,
@@ -145,10 +165,9 @@ class BookSqlite {
             $columnCName TEXT,
             $columnUpdateTime TEXT)
           ''');
-        },
-        onUpgrade: (Database db, int oldVersion, int newVersion) async {
-          await db.execute("ALTER TABLE $tableBook ADD $columnPath TEXT");
-        }) ;
+    }, onUpgrade: (Database db, int oldVersion, int newVersion) async {
+      await db.execute("ALTER TABLE $tableBook ADD $columnPath TEXT");
+    });
   }
 
 // 插入一条书籍数据
@@ -212,7 +231,8 @@ class BookSqlite {
   }
 
   // 根据ID查找书籍信息
-  Future<Book> getBook(int id,{
+  Future<Book> getBook(
+    int id, {
     String path,
   }) async {
     await this.openSqlite();
@@ -231,8 +251,8 @@ class BookSqlite {
           columnUpdateTime,
           columnPath
         ],
-        where: id>0? '$columnId = ?':'$columnPath=?',
-        whereArgs: id>0? [id]:[path]);
+        where: id > 0 ? '$columnId = ?' : '$columnPath=?',
+        whereArgs: id > 0 ? [id] : [path]);
     if (maps.length > 0) {
       return Book.fromMap(maps.first);
     }
@@ -255,6 +275,6 @@ class BookSqlite {
 
   // 记得及时关闭数据库，防止内存泄漏
   close() async {
-    await db.close();
+    await db?.close();
   }
 }
