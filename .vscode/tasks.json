@@ -6,7 +6,8 @@
         {
             "label": "buld apk",
             "type": "shell",
-            "command": "flutter build apk --target-platform android-arm"
+            "command": "flutter build apk --target-platform android-arm",
+            "problemMatcher": []
         }
     ]
 }

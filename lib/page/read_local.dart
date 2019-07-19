@@ -48,7 +48,6 @@ class _ReadPageState extends State<ReadPageLocal>
   String _content = "";
   bool _isMark = false;
 
-  // 读取 文件 数据，暂时只能utf8格式，gbk库不支持chunk
   // _getChaptersData(start,end) openRead(start,end)
   _getChaptersData() async {
     try {
@@ -66,9 +65,12 @@ class _ReadPageState extends State<ReadPageLocal>
 
       final file = new File('$filePath');
       Stream<List<int>> inputStream = file.openRead();
-
+ 
       Utf8Codec _utf8 = Utf8Codec(allowMalformed: true);
       inputStream
+          .map((List<int> input){
+            return _book.charset=='utf8'? input:utf8.encode(gbk_bytes.decode(input));
+          })
           .transform(_utf8.decoder) // Decode bytes to UTF-8. gbk.decoder
           .transform(new LineSplitter()) // Convert stream to individual lines.
           .listen((String line) {
@@ -133,8 +135,8 @@ class _ReadPageState extends State<ReadPageLocal>
         _isAdd = true;
         _book = b;
       }
+      _getChaptersData();
     });
-    _getChaptersData();
   }
 
   @override

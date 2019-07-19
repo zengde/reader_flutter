@@ -49,6 +49,7 @@ final String columnCName = 'CName';
 final String columnUpdateTime = 'UpdateTime';
 final String columnPosition = 'Positon';
 final String columnPath = 'Path';
+final String columnCharset = 'Charset';
 
 class Book {
   int id;
@@ -73,7 +74,6 @@ class Book {
     book.position = map['Positon'] ?? 0;
     book.name = map['Name'] ?? "";
     book.author = map['Author'] ?? "";
-    book.img = getCompleteImgUrl(map['Img'].toString()) ?? "";
     book.desc = map['Desc'] ?? "";
     book.bookStatus = map['BookStatus'] ?? "";
     book.lastChapterId = map['LastChapterId'] ?? "";
@@ -82,7 +82,10 @@ class Book {
     book.updateTime = map['UpdateTime'] ?? "";
     book.path = map['Path'] ?? "";
     book.charset = map['Charset'] ?? "";
-    book.isLocal = book.path == '';
+    book.isLocal = book.path != '';
+    book.img = book.isLocal
+        ? map['Img']
+        : (getCompleteImgUrl(map['Img'].toString()) ?? "");
     return book;
   }
 
@@ -101,6 +104,8 @@ class Book {
     book.cname = map['CategoryName'] ?? "";
     book.updateTime = "";
     book.path = map['Path'] ?? "";
+    book.charset = map['Charset'] ?? "";
+    book.isLocal = book.path == '';
     return book;
   }
 
@@ -109,10 +114,11 @@ class Book {
     Book book;
     if (!FileSystemEntity.isDirectorySync(file.path)) {
       book = new Book();
+      book.img = 'assets/images/cover_txt.png';
       book.name = getFileBaseName(file);
       book.path = file.path;
-      book.updateTime =new DateTime.now().toIso8601String();
-      book.isLocal=true;
+      book.updateTime = new DateTime.now().toIso8601String();
+      book.isLocal = true;
       if (file is File) book.charset = mcharsetDetector(file.openSync());
       print(book.charset);
     }
@@ -132,6 +138,7 @@ class Book {
       columnUpdateTime: updateTime,
       columnPosition: position,
       columnPath: path,
+      columnCharset: charset
     };
     if (id != null) {
       map[columnId] = id;
@@ -149,7 +156,7 @@ class BookSqlite {
     String path = join(databasesPath, 'book.db');
 
 //根据数据库文件路径和数据库版本号创建数据库表
-    db = await openDatabase(path, version: 2,
+    db = await openDatabase(path, version: 3,
         onCreate: (Database db, int version) async {
       await db.execute('''
           CREATE TABLE $tableBook (
@@ -163,10 +170,10 @@ class BookSqlite {
             $columnLastChapterId TEXT, 
             $columnLastChapter TEXT, 
             $columnCName TEXT,
-            $columnUpdateTime TEXT)
+            $columnUpdateTime TEXT,
+            $columnPath TEXT,
+            $columnCharset TEXT)
           ''');
-    }, onUpgrade: (Database db, int oldVersion, int newVersion) async {
-      await db.execute("ALTER TABLE $tableBook ADD $columnPath TEXT");
     });
   }
 
@@ -191,7 +198,8 @@ class BookSqlite {
       columnLastChapter,
       columnCName,
       columnUpdateTime,
-      columnPath
+      columnPath,
+      columnCharset
     ]);
 
     if (maps == null || maps.length == 0) {
@@ -220,7 +228,8 @@ class BookSqlite {
           columnLastChapter,
           columnCName,
           columnUpdateTime,
-          columnPath
+          columnPath,
+          columnCharset
         ],
         where: '$columnId = ?',
         whereArgs: [id]);
@@ -249,7 +258,8 @@ class BookSqlite {
           columnLastChapter,
           columnCName,
           columnUpdateTime,
-          columnPath
+          columnPath,
+          columnCharset
         ],
         where: id > 0 ? '$columnId = ?' : '$columnPath=?',
         whereArgs: id > 0 ? [id] : [path]);

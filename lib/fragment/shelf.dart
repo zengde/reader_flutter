@@ -1,13 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/info.dart';
 import 'package:reader_flutter/page/read.dart';
 import 'package:reader_flutter/page/read_local.dart';
 import 'package:reader_flutter/util/constants.dart';
 import 'package:reader_flutter/util/http_manager.dart';
-import 'package:file_picker/file_picker.dart';
 
 class BookShelf extends StatefulWidget {
   @override
@@ -18,6 +16,7 @@ class _BookShelfState extends State<BookShelf>
     with AutomaticKeepAliveClientMixin {
   List<Book> _books = [];
   final BookSqlite bookSqlite = BookSqlite();
+  bool isListStyle = true;
 
   @override
   void initState() {
@@ -48,7 +47,22 @@ class _BookShelfState extends State<BookShelf>
     );
   }
 
-  Widget bookShelfItem(Book book) {
+  Widget buildShelfItemView(int index) {
+    Book book;
+    if (index == _books.length) {
+      book = new Book();
+      book.name = '添加书籍';
+      book.author = '';
+      book.img = 'assets/images/bookshelf_add.png';
+      book.updateTime = '';
+      book.isLocal = true;
+      book.lastChapter = '';
+      return InkWell(
+        onTap: () {},
+        child: bookShelfItem(book),
+      );
+    }
+    book = _books[index];
     return InkWell(
       onLongPress: () {
         showAlertDialog(book);
@@ -56,82 +70,155 @@ class _BookShelfState extends State<BookShelf>
       onTap: () {
         Navigator.push(context,
             MaterialPageRoute(builder: (BuildContext context) {
-          return book.isLocal ? ReadPage(book.id) : ReadPageLocal(book.path);
+          return book.isLocal ?  ReadPageLocal(book.path):ReadPage(book.id);
         }));
       },
       highlightColor: Colors.black12,
+      child: bookShelfItem(book),
+    );
+  }
+
+  Widget buildShelfItemViewGrid() {
+    List<Widget> children = [];
+    _books.forEach((novel) {
+      children.add(bookShelfItemGrid(novel));
+    });
+    var width = (MediaQuery.of(context).size.width - 15 * 2 - 24 * 2) / 3;
+    children.add(GestureDetector(
+      onTap: () {},
       child: Container(
-        margin: EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 10),
-        height: 100.0,
-        child: Row(
+        width: width,
+        height: width / 0.75,
+        child: Image.asset('assets/images/bookshelf_add.png'),
+      ),
+    ));
+    return Container(
+      padding: EdgeInsets.fromLTRB(15, 20, 15, 15),
+      child: Wrap(
+        spacing: 23,
+        children: children,
+      ),
+    );
+  }
+
+  Widget bookShelfItemGrid(Book book) {
+    var width = (MediaQuery.of(context).size.width - 15 * 2 - 24 * 2) / 3;
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (BuildContext context) {
+          return book.isLocal ?  ReadPageLocal(book.path):ReadPage(book.id);
+        }));
+      },
+      child: Container(
+        width: width,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(2.0),
+            DecoratedBox(
               child: book.isLocal
                   ? Image.asset(
-                      'images/cover_txt.png',
-                      fit: BoxFit.cover,
-                      width: 80,
-                      height: 100,
+                      book.img,
+                      width: width,
+                      height: width / 0.75,
                     )
                   : CachedNetworkImage(
-                      fit: BoxFit.cover,
                       imageUrl: book.img,
-                      width: 80,
-                      height: 100,
+                      width: width,
+                      height: width / 0.75,
+                      placeholder: (context, url) =>
+                          new CircularProgressIndicator(),
+                      errorWidget: (context, url, error) =>
+                          new Icon(Icons.error),
                     ),
+              decoration: BoxDecoration(boxShadow: [
+                BoxShadow(color: Color(0x22000000), blurRadius: 5)
+              ]),
             ),
-            Expanded(
-              child: Container(
-                padding: EdgeInsets.only(left: 20.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      book.name,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w100,
-                          color: Colors.black,
-                          fontSize: 16.0),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    Text(
-                      book.author,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w100,
-                          color: Colors.black,
-                          fontSize: 14.0),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    Text(
-                      book.lastChapter,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w100,
-                          color: Colors.black,
-                          fontSize: 14.0),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    Text(
-                      book.updateTime,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w100,
-                          color: Colors.black,
-                          fontSize: 14.0),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            SizedBox(height: 10),
+            Text(book.name,
+                style: TextStyle(fontSize: 14),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            SizedBox(height: 25),
           ],
         ),
       ),
     );
+  }
+
+  Widget bookShelfItem(Book book) {
+    List<Widget> children = [
+      ClipRRect(
+        borderRadius: BorderRadius.circular(2.0),
+        child: book.isLocal
+            ? Image.asset(
+                book.img,
+                fit: BoxFit.cover,
+                width: 80,
+                height: 100,
+              )
+            : CachedNetworkImage(
+                fit: BoxFit.cover,
+                imageUrl: book.img,
+                width: 80,
+                height: 100,
+              ),
+      ),
+      Expanded(
+        child: Container(
+          padding: EdgeInsets.only(left: 20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                book.name,
+                style: TextStyle(
+                    fontWeight: FontWeight.w100,
+                    color: Colors.black,
+                    fontSize: 16.0),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              Text(
+                book.author,
+                style: TextStyle(
+                    fontWeight: FontWeight.w100,
+                    color: Colors.black,
+                    fontSize: 14.0),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              Text(
+                book.lastChapter,
+                style: TextStyle(
+                    fontWeight: FontWeight.w100,
+                    color: Colors.black,
+                    fontSize: 14.0),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+              Text(
+                book.updateTime,
+                style: TextStyle(
+                    fontWeight: FontWeight.w100,
+                    color: Colors.black,
+                    fontSize: 14.0),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+    return Container(
+        margin: EdgeInsets.only(left: 15, right: 15, top: 10, bottom: 10),
+        height: 100.0,
+        child: Row(
+          children: children,
+        ));
   }
 
   void showAlertDialog(Book book) {
@@ -142,11 +229,13 @@ class _BookShelfState extends State<BookShelf>
                 content: new Column(
                   children: <Widget>[
                     new Text("是否删除 ${book.name}?"),
-                    book.isLocal? CheckboxListTile(
-                      title:Text("是否同时删除本地文件?") ,
-                      value: true,
-                      onChanged: (val){},
-                    ):Container(),
+                    book.isLocal
+                        ? CheckboxListTile(
+                            title: Text("是否同时删除本地文件?"),
+                            value: true,
+                            onChanged: (val) {},
+                          )
+                        : Container(),
                   ],
                 ),
                 actions: <Widget>[
@@ -200,33 +289,17 @@ class _BookShelfState extends State<BookShelf>
     });
   }
 
-  PopupMenuItem<String> _buildPopupMenuItem(String path, String text) {
+  PopupMenuItem<String> _buildPopupMenuItem(
+      String path, String text, IconData icon) {
     return new PopupMenuItem<String>(
       value: path,
       child: Row(children: <Widget>[
         Padding(
             padding: EdgeInsets.fromLTRB(0.0, 0.0, 8.0, 0.0),
-            child: Icon(Icons.save_alt)),
+            child: Icon(icon)),
         Text(text)
       ]),
     );
-  }
-
-  void getFilePath() async {
-    try {
-      String filePath = await FilePicker.getFilePath(
-          type: FileType.CUSTOM, fileExtension: 'txt');
-      if (filePath == '') {
-        return;
-      }
-      print(filePath);
-      Navigator.push(context,
-          MaterialPageRoute(builder: (BuildContext context) {
-        return ReadPageLocal(filePath);
-      }));
-    } on PlatformException catch (e) {
-      print("Error while picking file");
-    }
   }
 
   @override
@@ -249,13 +322,21 @@ class _BookShelfState extends State<BookShelf>
                 context: context,
                 position: RelativeRect.fromLTRB(1000.0, 80.0, 0.0, 0.0),
                 items: <PopupMenuItem<String>>[
-                  _buildPopupMenuItem('/import', '本地导入'),
+                  _buildPopupMenuItem('/import', '本地导入', Icons.save_alt),
+                  _buildPopupMenuItem(
+                      '/style',
+                      '${isListStyle ? "图墙" : "列表"}模式',
+                      isListStyle ? Icons.view_module : Icons.view_list),
                 ],
               );
               switch (result) {
                 case '/import':
-                  //getFilePath();
                   Navigator.of(context).pushNamed('/importLocal');
+                  break;
+                case '/style':
+                  setState(() {
+                    isListStyle = !isListStyle;
+                  });
                   break;
               }
             },
@@ -284,18 +365,26 @@ class _BookShelfState extends State<BookShelf>
               ),
             )
           : RefreshIndicator(
-              child: ListView.separated(
-                itemBuilder: (BuildContext context, int index) {
-                  return bookShelfItem(_books[index]);
-                },
-                separatorBuilder: (BuildContext context, int index) {
-                  return new Divider(
-                    height: 1.0,
-                    color: Colors.black12,
-                  );
-                },
-                itemCount: _books.length,
-              ),
+              child: isListStyle
+                  ? ListView.separated(
+                      itemBuilder: (BuildContext context, int index) {
+                        return buildShelfItemView(index);
+                      },
+                      separatorBuilder: (BuildContext context, int index) {
+                        return new Divider(
+                          height: 1.0,
+                          color: Colors.black12,
+                        );
+                      },
+                      itemCount: _books.length + 1,
+                    )
+                  : ListView(
+                      padding: EdgeInsets.only(top: 0),
+                      //controller: scrollController,
+                      children: <Widget>[
+                        buildShelfItemViewGrid(),
+                      ],
+                    ),
               onRefresh: _onRefresh,
             ),
     );
