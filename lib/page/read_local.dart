@@ -3,14 +3,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gbk_codec/gbk_codec.dart';
+import 'package:intl/intl.dart';
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/mark.dart';
 import 'package:reader_flutter/bean/volume.dart';
+import 'package:reader_flutter/page/reader/battery_view.dart';
+import 'package:reader_flutter/page/reader/reader_page_agent.dart';
 import 'package:reader_flutter/util/constants.dart';
+import 'package:reader_flutter/util/screen.dart';
 import 'package:reader_flutter/util/util.dart';
 import 'package:reader_flutter/view/load.dart';
 
 import 'catalog_local.dart';
+import 'reader/reader_utils.dart';
 
 class ReadPageLocal extends StatefulWidget {
   @override
@@ -27,15 +32,13 @@ class ReadPageLocal extends StatefulWidget {
 
 class _ReadPageState extends State<ReadPageLocal>
     with AutomaticKeepAliveClientMixin {
-  final _scrollController = ScrollController();
-
   final BookSqlite _bookSqlite = BookSqlite();
 
   final BookMarkSqlite _bookMarkSqlite = BookMarkSqlite();
 
   double _letterSpacing = 2.0;
-  double _lineHeight = 2.0;
-  double _titleFontSize = 30.0;
+  double _lineHeight = 1.5;
+  double _titleFontSize = 14.0;
   double _contentFontSize = 18.0;
   bool _isShowMenu = false;
   bool _isDayMode = true;
@@ -47,9 +50,16 @@ class _ReadPageState extends State<ReadPageLocal>
   bool _isAdd = false;
   String _content = "";
   bool _isMark = false;
+  int _curPage;
+  List<Map<String, int>> _pageOffsets;
+  double topSafeHeight = 0;
+  PageController pageController = PageController(keepPage: false);
 
   // _getChaptersData(start,end) openRead(start,end)
   _getChaptersData() async {
+    await Future.delayed(const Duration(milliseconds: 100), () {});
+    topSafeHeight = Screen.topSafeHeight;
+
     try {
       String filePath = widget.filePath;
       RegExp volumeExp = RegExp(
@@ -58,6 +68,7 @@ class _ReadPageState extends State<ReadPageLocal>
       RegExp chpterExp = RegExp(
           r'^[\s\t　]*第?[0-9零一二三四五六七八九十序百千]+[章节回话]\s*.{0,20}$',
           unicode: true);
+      RegExp empty = RegExp(r'^[\s　\t]*$');
 
       int k = -1;
       bool iscn = false;
@@ -65,70 +76,90 @@ class _ReadPageState extends State<ReadPageLocal>
 
       final file = new File('$filePath');
       Stream<List<int>> inputStream = file.openRead();
- 
+
       Utf8Codec _utf8 = Utf8Codec(allowMalformed: true);
       inputStream
-          .map((List<int> input){
-            return _book.charset=='utf8'? input:utf8.encode(gbk_bytes.decode(input));
+          .map((List<int> input) {
+            return _book.charset == 'utf8'
+                ? input
+                : utf8.encode(gbk_bytes.decode(input));
           })
           .transform(_utf8.decoder) // Decode bytes to UTF-8. gbk.decoder
           .transform(new LineSplitter()) // Convert stream to individual lines.
           .listen((String line) {
-        if (volumeExp.hasMatch(line)) {
-          k++;
-          Iterable<RegExpMatch> volumeMatches = volumeExp.allMatches(line);
-          _chapters.insert(
-              k,
-              new Chapter(
-                  name: volumeMatches.elementAt(0).group(0),
-                  isHeader: true,
-                  headerId: k));
-          iscn = false;
-        } else if (chpterExp.hasMatch(line)) {
-          k++;
-          Iterable<RegExpMatch> chapterMatches = chpterExp.allMatches(line);
-          _chapters.insert(
-              k,
-              Chapter.fromMap({
-                'name': chapterMatches.elementAt(0).group(0), 
-                'isHeader': false,
-                'id':k
-              }));
-          iscn = true;
-        } else {
-          if (iscn) {
-            _chapters[k].content = _chapters[k].content + line + "\r\n";
-          }
-        }
-        _full += line + "\r\n";
-        // gbk.decode(line)
-      }, onDone: () {
-        if (_chapters.length < 1) {
-          _chapters.insert(0, new Chapter(name: '全文', isHeader: false));
-          _chapters[0].content = _full;
-        }
-        _getChapterData();
-        print('File is now closed.');
-      }, onError: (e) {
-        print(e.toString());
-      });
+            if (line == '') {
+              return;
+            }
+            if (volumeExp.hasMatch(line)) {
+              k++;
+              Iterable<RegExpMatch> volumeMatches = volumeExp.allMatches(line);
+              _chapters.insert(
+                  k,
+                  new Chapter(
+                      name: volumeMatches.elementAt(0).group(0),
+                      isHeader: true,
+                      headerId: k));
+              iscn = false;
+            } else if (chpterExp.hasMatch(line)) {
+              k++;
+              Iterable<RegExpMatch> chapterMatches = chpterExp.allMatches(line);
+              _chapters.insert(
+                  k,
+                  Chapter.fromMap({
+                    'name': chapterMatches.elementAt(0).group(0),
+                    'isHeader': false,
+                    'id': k
+                  }));
+              iscn = true;
+            } else {
+              if (iscn) {
+                _chapters[k].content = _chapters[k].content + line + "\r\n";
+              }
+            }
+            _full += line + "\r\n";
+            // gbk.decode(line)
+          }, onDone: () {
+            if (_chapters.length < 1) {
+              _chapters.insert(0, new Chapter(name: '全文', isHeader: false));
+              _chapters[0].content = _full;
+            }
+            _getChapterData();
+            print('File is now closed.');
+          }, onError: (e) {
+            print(e.toString());
+          });
     } catch (err) {
       print(err);
     }
   }
 
   _getChapterData() {
+    _curPage = 0;
+    var tempContent = _chapters[_curPosition].content;
+    var contentHeight = Screen.height -
+        topSafeHeight -
+        ReaderUtils.topOffset -
+        Screen.bottomSafeHeight -
+        ReaderUtils.bottomOffset -
+        20;
+    var contentWidth = Screen.width - 15 - 10;
+
     setState(() {
       _progress = _curPosition / _chapters.length;
-      _content = _chapters[_curPosition].content;
+      _content = tempContent;
+      _pageOffsets = ReaderPageAgent.getPageOffsets(tempContent, contentHeight,
+          contentWidth, _letterSpacing, _lineHeight, _contentFontSize);
+
       print("阅读位置$_curPosition");
       print("阅读进度$_progress");
+      print("页数${_pageOffsets.length}");
     });
   }
 
   @override
   void initState() {
     super.initState();
+
     /*查询是否已添加*/
     _bookSqlite.getBook(0, path: widget.filePath).then((b) {
       if (b != null) {
@@ -142,6 +173,7 @@ class _ReadPageState extends State<ReadPageLocal>
   @override
   void dispose() {
     _bookSqlite.close();
+    pageController.dispose();
     SystemChrome.setEnabledSystemUIOverlays(
         [SystemUiOverlay.top, SystemUiOverlay.bottom]);
     super.dispose();
@@ -158,6 +190,34 @@ class _ReadPageState extends State<ReadPageLocal>
     if (_curPosition != _chapters.length - 1) {
       _curPosition++;
       _getChapterData();
+    }
+  }
+
+  previousPage() {
+    if (_curPage == 0) {
+      if (_curPosition == 0) {
+        toast('已经是第一页了');
+        return;
+      } else {
+        _loadPre();
+      }
+    } else {
+      pageController.previousPage(
+          duration: Duration(milliseconds: 250), curve: Curves.easeOut);
+    }
+  }
+
+  nextPage() {
+    if (_curPage >= _pageOffsets.length - 1) {
+      if (_curPosition == _chapters.length - 1) {
+        toast('已经是最后一页了');
+        return;
+      } else {
+        _loadNext();
+      }
+    } else {
+      pageController.nextPage(
+          duration: Duration(milliseconds: 250), curve: Curves.easeOut);
     }
   }
 
@@ -190,7 +250,7 @@ class _ReadPageState extends State<ReadPageLocal>
     if (chapter != null) {
       /*目录跳转*/
       print("目录跳转");
-      _curPosition = chapter.isHeader? chapter.headerId:chapter.id;
+      _curPosition = chapter.isHeader ? chapter.headerId : chapter.id;
       _getChapterData();
     }
   }
@@ -403,58 +463,81 @@ class _ReadPageState extends State<ReadPageLocal>
     );
   }
 
-  Widget _contentView() {
-    return Container(
-      child: Text(
-        _content,
-        style: TextStyle(
-          color: _isDayMode
-              ? AppColors.DayModeTextColor
-              : AppColors.NightModeTextColor,
-          height: _lineHeight,
-          fontSize: _contentFontSize,
-          letterSpacing: _letterSpacing,
-        ),
-      ),
-    );
-  }
-
-  Widget _titleView() {
+  Widget _contentView(int page) {
+    var offset = _pageOffsets[page];
+    var content = _content.substring(offset['start'], offset['end']);
     return Text(
-      _chapters[_curPosition].name,
+      content,
       style: TextStyle(
         color: _isDayMode
             ? AppColors.DayModeTextColor
             : AppColors.NightModeTextColor,
-        fontSize: _titleFontSize,
-        letterSpacing: 2,
+        height: _lineHeight,
+        fontSize: _contentFontSize - 0.5,
+        letterSpacing: _letterSpacing,
       ),
     );
   }
 
-  Widget reader() {
+  Widget readerOverlayer(int page) {
+    var format = DateFormat('HH:mm');
+    var time = format.format(DateTime.now());
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          15, 10 + topSafeHeight, 15, 10 + Screen.bottomSafeHeight),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(_chapters[_curPosition].name,
+              style: TextStyle(
+                fontSize: _titleFontSize,
+                color: _isDayMode
+                    ? AppColors.DayModeTextColor
+                    : AppColors.NightModeTextColor,
+              )),
+          Expanded(child: Container()),
+          Row(
+            children: <Widget>[
+              BatteryView(),
+              SizedBox(width: 10),
+              Text(time,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _isDayMode
+                        ? AppColors.DayModeTextColor
+                        : AppColors.NightModeTextColor,
+                  )),
+              Expanded(child: Container()),
+              Text('第${page + 1}/${_pageOffsets.length}页',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _isDayMode
+                        ? AppColors.DayModeTextColor
+                        : AppColors.NightModeTextColor,
+                  )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget reader(int page) {
     return Container(
       color: _isDayMode ? AppColors.DayModeBgColor : AppColors.NightModeBgColor,
       width: MediaQuery.of(context).size.width,
       height: MediaQuery.of(context).size.height,
       child: Stack(
         children: <Widget>[
-          SingleChildScrollView(
-            controller: _scrollController,
-            child: Container(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: kToolbarHeight,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  _titleView(),
-                  _contentView(),
-                ],
-              ),
-            ),
+          readerOverlayer(page),
+          Container(
+            margin: EdgeInsets.fromLTRB(
+                15,
+                topSafeHeight + ReaderUtils.topOffset,
+                10,
+                Screen.bottomSafeHeight + ReaderUtils.bottomOffset),
+            child: _contentView(page),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -462,14 +545,14 @@ class _ReadPageState extends State<ReadPageLocal>
               Expanded(
                 child: GestureDetector(
                   onTap: () {
-                    _loadPre();
+                    previousPage();
                   },
                 ),
               ),
               Expanded(
                 child: GestureDetector(
                   onTap: () {
-                    _loadNext();
+                    nextPage();
                   },
                 ),
               )
@@ -557,8 +640,14 @@ class _ReadPageState extends State<ReadPageLocal>
             Navigator.pop(context);
           },
         ),
-        iconTheme: IconThemeData(color: AppColors.DayModeIconTitleButtonColor),
-        backgroundColor: AppColors.DayModeMenuBgColor,
+        iconTheme: IconThemeData(
+          color: _isDayMode
+              ? AppColors.DayModeIconTitleButtonColor
+              : AppColors.NightModeIconTitleButtonColor,
+        ),
+        backgroundColor: _isDayMode
+            ? AppColors.DayModeMenuBgColor
+            : AppColors.NightModeMenuBgColor,
       ),
     );
   }
@@ -648,11 +737,34 @@ class _ReadPageState extends State<ReadPageLocal>
     );
   }
 
+  onPageChanged(int index) {
+    setState(() {
+      _curPage = index;
+    });
+  }
+
+  Widget buildPage(BuildContext context, int index) {
+    return reader(index);
+  }
+
+  Widget buildPageView() {
+    return PageView.builder(
+      physics: BouncingScrollPhysics(),
+      controller: pageController,
+      itemCount: _pageOffsets.length,
+      itemBuilder: buildPage,
+      onPageChanged: onPageChanged,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return _content == ''
         ? LoadingPage()
         : Scaffold(
+            backgroundColor: _isDayMode
+                ? AppColors.DayModeBgColor
+                : AppColors.NightModeBgColor,
             drawer: new Drawer(
               child: CatalogPageLocal(
                 widget.filePath,
@@ -662,7 +774,7 @@ class _ReadPageState extends State<ReadPageLocal>
             ),
             body: Stack(
               children: <Widget>[
-                reader(),
+                buildPageView(),
                 _isShowMenu
                     ? Positioned(
                         child: _topMenu(),
