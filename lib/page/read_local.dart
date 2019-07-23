@@ -3,19 +3,25 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gbk_codec/gbk_codec.dart';
-import 'package:intl/intl.dart';
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/mark.dart';
 import 'package:reader_flutter/bean/volume.dart';
-import 'package:reader_flutter/page/reader/battery_view.dart';
+import 'package:reader_flutter/page/reader/reader_config.dart';
 import 'package:reader_flutter/page/reader/reader_page_agent.dart';
-import 'package:reader_flutter/util/constants.dart';
 import 'package:reader_flutter/util/screen.dart';
 import 'package:reader_flutter/util/util.dart';
 import 'package:reader_flutter/view/load.dart';
+/*
+import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+*/
 
 import 'catalog_local.dart';
-import 'reader/reader_utils.dart';
+import 'reader/reader_menu.dart';
+import 'reader/reader_view.dart';
+
+enum PageJumpType { stay, firstPage, lastPage }
 
 class ReadPageLocal extends StatefulWidget {
   @override
@@ -36,32 +42,39 @@ class _ReadPageState extends State<ReadPageLocal>
 
   final BookMarkSqlite _bookMarkSqlite = BookMarkSqlite();
 
-  double _letterSpacing = 2.0;
-  double _lineHeight = 1.5;
-  double _titleFontSize = 14.0;
-  double _contentFontSize = 18.0;
   bool _isShowMenu = false;
-  bool _isDayMode = true;
   int _curPosition = 0;
   List<Volume> _volumes = [];
   List<Chapter> _chapters = [];
   Book _book;
-  double _progress = 0.0;
   bool _isAdd = false;
-  String _content = "";
-  bool _isMark = false;
-  int _curPage;
-  List<Map<String, int>> _pageOffsets;
+
+  int _curPage = 0;
   double topSafeHeight = 0;
   PageController pageController = PageController(keepPage: false);
+  Chapter currentArticle;
+  Chapter preArticle;
+  Chapter nextArticle;
+  final GlobalKey<ScaffoldState> scaffoldKey = new GlobalKey<ScaffoldState>();
 
   // _getChaptersData(start,end) openRead(start,end)
   _getChaptersData() async {
     await Future.delayed(const Duration(milliseconds: 100), () {});
     topSafeHeight = Screen.topSafeHeight;
+    String filePath = widget.filePath;
+
+    /*
+    String fileMd5 = md5.convert(filePath.codeUnits).toString() + '.json';
+    Directory appDirectory = await getApplicationDocumentsDirectory();
+    File chapterFile = new File(p.join(appDirectory.path, fileMd5));
+    if (chapterFile.existsSync()) {
+      var responseStr = chapterFile.readAsStringSync();
+      var responseJson = json.decode(responseStr);
+      return responseJson['chapters'];
+    }
+    */
 
     try {
-      String filePath = widget.filePath;
       RegExp volumeExp = RegExp(
           r'^[\s\t　]*(第?[0-9零一二三四五六七八九十]+卷|卷[0-9零一二三四五六七八九十]+)\s*.{0,20}$',
           unicode: true);
@@ -95,10 +108,12 @@ class _ReadPageState extends State<ReadPageLocal>
               Iterable<RegExpMatch> volumeMatches = volumeExp.allMatches(line);
               _chapters.insert(
                   k,
-                  new Chapter(
-                      name: volumeMatches.elementAt(0).group(0),
-                      isHeader: true,
-                      headerId: k));
+                  Chapter.fromMap({
+                    'name': volumeMatches.elementAt(0).group(0),
+                    'isHeader': true,
+                    'id': k,
+                    'headerId': k
+                  }));
               iscn = false;
             } else if (chpterExp.hasMatch(line)) {
               k++;
@@ -117,13 +132,12 @@ class _ReadPageState extends State<ReadPageLocal>
               }
             }
             _full += line + "\r\n";
-            // gbk.decode(line)
           }, onDone: () {
             if (_chapters.length < 1) {
               _chapters.insert(0, new Chapter(name: '全文', isHeader: false));
               _chapters[0].content = _full;
             }
-            _getChapterData();
+            _getChapterData(_curPosition, PageJumpType.stay);
             print('File is now closed.');
           }, onError: (e) {
             print(e.toString());
@@ -133,32 +147,47 @@ class _ReadPageState extends State<ReadPageLocal>
     }
   }
 
-  _getChapterData() {
-    _curPage = 0;
-    var tempContent = _chapters[_curPosition].content;
-    var contentHeight = Screen.height -
-        topSafeHeight -
-        ReaderUtils.topOffset -
-        Screen.bottomSafeHeight -
-        ReaderUtils.bottomOffset -
-        20;
-    var contentWidth = Screen.width - 15 - 10;
+  _getChapterData(int chapterId, PageJumpType jumpType) {
+    currentArticle = fetchChapter(chapterId);
+    if (chapterId > 0) {
+      preArticle = fetchChapter(chapterId - 1);
+    } else {
+      preArticle = null;
+    }
+    if (chapterId < _chapters.length) {
+      nextArticle = fetchChapter(chapterId + 1);
+    } else {
+      nextArticle = null;
+    }
+    if (jumpType == PageJumpType.firstPage) {
+      _curPage = 0;
+    } else if (jumpType == PageJumpType.lastPage) {
+      _curPage = currentArticle.pageCount - 1;
+    }
+    if (jumpType != PageJumpType.stay) {
+      pageController.jumpToPage(
+          (preArticle != null ? preArticle.pageCount : 0) + _curPage);
+    }
 
     setState(() {
-      _progress = _curPosition / _chapters.length;
-      _content = tempContent;
-      _pageOffsets = ReaderPageAgent.getPageOffsets(tempContent, contentHeight,
-          contentWidth, _letterSpacing, _lineHeight, _contentFontSize);
-
       print("阅读位置$_curPosition");
-      print("阅读进度$_progress");
-      print("页数${_pageOffsets.length}");
+      print("页数${currentArticle.pageCount}");
     });
+  }
+
+  Chapter fetchChapter(int chapterId) {
+    var tempContent = _chapters[chapterId].content;
+    if (_chapters[chapterId].pageCount == null) {
+      _chapters[chapterId].pageOffsets =
+          ReaderPageAgent.getPageOffsets(tempContent, topSafeHeight);
+    }
+    return _chapters[chapterId];
   }
 
   @override
   void initState() {
     super.initState();
+    pageController.addListener(onScroll);
 
     /*查询是否已添加*/
     _bookSqlite.getBook(0, path: widget.filePath).then((b) {
@@ -179,46 +208,40 @@ class _ReadPageState extends State<ReadPageLocal>
     super.dispose();
   }
 
-  _loadPre() {
-    if (_curPosition != 0) {
-      _curPosition--;
-      _getChapterData();
+  _loadPre(int chapterId) {
+    if (preArticle != null || chapterId == 0) {
+      return;
     }
+    preArticle = fetchChapter(chapterId);
+    pageController.jumpToPage(preArticle.pageCount + _curPage);
+    setState(() {});
   }
 
-  _loadNext() {
-    if (_curPosition != _chapters.length - 1) {
-      _curPosition++;
-      _getChapterData();
+  _loadNext(int chapterId) {
+    if (nextArticle != null || chapterId == 0) {
+      return;
     }
+    nextArticle = fetchChapter(chapterId);
+    setState(() {});
   }
 
   previousPage() {
-    if (_curPage == 0) {
-      if (_curPosition == 0) {
-        toast('已经是第一页了');
-        return;
-      } else {
-        _loadPre();
-      }
-    } else {
-      pageController.previousPage(
-          duration: Duration(milliseconds: 250), curve: Curves.easeOut);
+    if (_curPage == 0 && currentArticle.id == 0) {
+      toast('已经是第一页了');
+      return;
     }
+    pageController.previousPage(
+        duration: Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   nextPage() {
-    if (_curPage >= _pageOffsets.length - 1) {
-      if (_curPosition == _chapters.length - 1) {
-        toast('已经是最后一页了');
-        return;
-      } else {
-        _loadNext();
-      }
-    } else {
-      pageController.nextPage(
-          duration: Duration(milliseconds: 250), curve: Curves.easeOut);
+    if (_curPage >= currentArticle.pageCount - 1 &&
+        currentArticle.id == _chapters.length - 1) {
+      toast('已经是最后一页了');
+      return;
     }
+    pageController.nextPage(
+        duration: Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   _updateBookMark() {}
@@ -228,9 +251,7 @@ class _ReadPageState extends State<ReadPageLocal>
       context: context,
       builder: (BuildContext context) {
         return Container(
-          color: _isDayMode
-              ? AppColors.DayModeMenuBgColor
-              : AppColors.NightModeMenuBgColor,
+          color: ReaderConfig.instance.menuBgColor,
           height: 200,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -251,7 +272,45 @@ class _ReadPageState extends State<ReadPageLocal>
       /*目录跳转*/
       print("目录跳转");
       _curPosition = chapter.isHeader ? chapter.headerId : chapter.id;
-      _getChapterData();
+      _getChapterData(_curPosition, PageJumpType.firstPage);
+    }
+  }
+
+  onPageChanged(int index) {
+    var page = index - (preArticle != null ? preArticle.pageCount : 0);
+    if (page < currentArticle.pageCount && page >= 0) {
+      setState(() {
+        _curPage = page;
+      });
+    }
+  }
+
+  onScroll() {
+    var page = pageController.offset / Screen.width;
+
+    var nextArtilePage = currentArticle.pageCount +
+        (preArticle != null ? preArticle.pageCount : 0);
+    if (page >= nextArtilePage) {
+      print('到达下个章节了');
+
+      preArticle = currentArticle;
+      currentArticle = nextArticle;
+      nextArticle = null;
+      _curPage = 0;
+      pageController.jumpToPage(preArticle.pageCount);
+      _loadNext(currentArticle.id + 1);
+      setState(() {});
+    }
+    if (preArticle != null && page <= preArticle.pageCount - 1) {
+      print('到达上个章节了');
+
+      nextArticle = currentArticle;
+      currentArticle = preArticle;
+      preArticle = null;
+      _curPage = currentArticle.pageCount - 1;
+      pageController.jumpToPage(currentArticle.pageCount - 1);
+      _loadPre(currentArticle.id - 1);
+      setState(() {});
     }
   }
 
@@ -265,9 +324,7 @@ class _ReadPageState extends State<ReadPageLocal>
             child: Text(
               "正文字体",
               style: TextStyle(
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
             ),
             flex: 2,
@@ -276,13 +333,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.remove,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _contentFontSize--;
+                  ReaderConfig.instance.contentFontSize--;
                 });
               },
             ),
@@ -291,13 +346,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.add,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _contentFontSize++;
+                  ReaderConfig.instance.contentFontSize++;
                 });
               },
             ),
@@ -317,9 +370,7 @@ class _ReadPageState extends State<ReadPageLocal>
             child: Text(
               "标题字体",
               style: TextStyle(
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
             ),
             flex: 2,
@@ -328,13 +379,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.remove,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _titleFontSize--;
+                  ReaderConfig.instance.titleFontSize--;
                 });
               },
             ),
@@ -343,13 +392,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.add,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _titleFontSize++;
+                  ReaderConfig.instance.titleFontSize++;
                 });
               },
             ),
@@ -369,9 +416,7 @@ class _ReadPageState extends State<ReadPageLocal>
             child: Text(
               "行高",
               style: TextStyle(
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
             ),
             flex: 2,
@@ -380,13 +425,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.remove,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _lineHeight--;
+                  ReaderConfig.instance.lineHeight--;
                 });
               },
             ),
@@ -395,13 +438,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.add,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _lineHeight++;
+                  ReaderConfig.instance.lineHeight++;
                 });
               },
             ),
@@ -421,9 +462,7 @@ class _ReadPageState extends State<ReadPageLocal>
             child: Text(
               "间距",
               style: TextStyle(
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
             ),
             flex: 2,
@@ -432,13 +471,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.remove,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _letterSpacing--;
+                  ReaderConfig.instance.letterSpacing--;
                 });
               },
             ),
@@ -447,13 +484,11 @@ class _ReadPageState extends State<ReadPageLocal>
             child: FlatButton(
               child: Icon(
                 Icons.add,
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
+                color: ReaderConfig.instance.btnColor,
               ),
               onPressed: () {
                 setState(() {
-                  _letterSpacing++;
+                  ReaderConfig.instance.letterSpacing++;
                 });
               },
             ),
@@ -463,333 +498,133 @@ class _ReadPageState extends State<ReadPageLocal>
     );
   }
 
-  Widget _contentView(int page) {
-    var offset = _pageOffsets[page];
-    var content = _content.substring(offset['start'], offset['end']);
-    return Text(
-      content,
-      style: TextStyle(
-        color: _isDayMode
-            ? AppColors.DayModeTextColor
-            : AppColors.NightModeTextColor,
-        height: _lineHeight,
-        fontSize: _contentFontSize - 0.5,
-        letterSpacing: _letterSpacing,
-      ),
-    );
-  }
-
-  Widget readerOverlayer(int page) {
-    var format = DateFormat('HH:mm');
-    var time = format.format(DateTime.now());
-
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-          15, 10 + topSafeHeight, 15, 10 + Screen.bottomSafeHeight),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(_chapters[_curPosition].name,
-              style: TextStyle(
-                fontSize: _titleFontSize,
-                color: _isDayMode
-                    ? AppColors.DayModeTextColor
-                    : AppColors.NightModeTextColor,
-              )),
-          Expanded(child: Container()),
-          Row(
-            children: <Widget>[
-              BatteryView(),
-              SizedBox(width: 10),
-              Text(time,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _isDayMode
-                        ? AppColors.DayModeTextColor
-                        : AppColors.NightModeTextColor,
-                  )),
-              Expanded(child: Container()),
-              Text('第${page + 1}/${_pageOffsets.length}页',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: _isDayMode
-                        ? AppColors.DayModeTextColor
-                        : AppColors.NightModeTextColor,
-                  )),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget reader(int page) {
-    return Container(
-      color: _isDayMode ? AppColors.DayModeBgColor : AppColors.NightModeBgColor,
-      width: MediaQuery.of(context).size.width,
-      height: MediaQuery.of(context).size.height,
-      child: Stack(
-        children: <Widget>[
-          readerOverlayer(page),
-          Container(
-            margin: EdgeInsets.fromLTRB(
-                15,
-                topSafeHeight + ReaderUtils.topOffset,
-                10,
-                Screen.bottomSafeHeight + ReaderUtils.bottomOffset),
-            child: _contentView(page),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    previousPage();
-                  },
-                ),
-              ),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    nextPage();
-                  },
-                ),
-              )
-            ],
-          ),
-          Center(
-            child: Container(
-              width: MediaQuery.of(context).size.width / 3,
-              height: MediaQuery.of(context).size.height,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _updateBookMark();
-                    _isShowMenu = !_isShowMenu;
-                    _isShowMenu
-                        ? SystemChrome.setEnabledSystemUIOverlays(
-                            [SystemUiOverlay.top, SystemUiOverlay.bottom])
-                        : SystemChrome.setEnabledSystemUIOverlays([]);
-                  });
-                },
-              ),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget iconTitle(
-      BuildContext context, IconData iconData, String title, int index) {
-    return GestureDetector(
-      onTap: () {
-        switch (index) {
-          case 0:
-            Scaffold.of(context).openDrawer();
-            break;
-          case 1:
-            setState(() {
-              _isDayMode = !_isDayMode;
-            });
-            break;
-          case 2:
-            _isShowMenu = !_isShowMenu;
-            _isShowMenu
-                ? SystemChrome.setEnabledSystemUIOverlays(
-                    [SystemUiOverlay.top, SystemUiOverlay.bottom])
-                : SystemChrome.setEnabledSystemUIOverlays([]);
-            showSheet(context);
-            break;
-        }
-      },
-      child: Container(
-        padding: EdgeInsets.only(left: 40, right: 40, bottom: 20, top: 10),
-        child: Column(
-          children: <Widget>[
-            Icon(
-              iconData,
-              color: _isDayMode
-                  ? AppColors.DayModeIconTitleButtonColor
-                  : AppColors.NightModeIconTitleButtonColor,
-            ),
-            Text(
-              title,
-              style: TextStyle(
-                color: _isDayMode
-                    ? AppColors.DayModeIconTitleButtonColor
-                    : AppColors.NightModeIconTitleButtonColor,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _topMenu() {
-    return Container(
-      height: kToolbarHeight + MediaQuery.of(context).padding.top,
-      width: MediaQuery.of(context).size.width,
-      child: AppBar(
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-        iconTheme: IconThemeData(
-          color: _isDayMode
-              ? AppColors.DayModeIconTitleButtonColor
-              : AppColors.NightModeIconTitleButtonColor,
-        ),
-        backgroundColor: _isDayMode
-            ? AppColors.DayModeMenuBgColor
-            : AppColors.NightModeMenuBgColor,
-      ),
-    );
-  }
-
-  Widget _bottomMenu() {
-    return Container(
-      width: MediaQuery.of(context).size.width,
-      color: _isDayMode
-          ? AppColors.DayModeMenuBgColor
-          : AppColors.NightModeMenuBgColor,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: <Widget>[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              FlatButton(
-                onPressed: () {
-                  _loadPre();
-                },
-                child: Text(
-                  "上一章",
-                  style: TextStyle(
-                    color: _isDayMode
-                        ? AppColors.DayModeIconTitleButtonColor
-                        : AppColors.NightModeIconTitleButtonColor,
-                  ),
-                ),
-              ),
-              Container(
-                height: 2,
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    //未拖动的颜色
-                    inactiveTrackColor: _isDayMode
-                        ? AppColors.DayModeInactiveTrackColor
-                        : AppColors.NightModeInactiveTrackColor,
-                    //已拖动的颜色
-                    activeTrackColor: _isDayMode
-                        ? AppColors.DayModeActiveTrackColor
-                        : AppColors.NightModeActiveTrackColor,
-                    //滑块颜色
-                    thumbColor: _isDayMode
-                        ? AppColors.DayModeActiveTrackColor
-                        : AppColors.NightModeActiveTrackColor,
-                  ),
-                  child: Slider(
-                    value: _progress,
-                    onChanged: (value) {
-                      setState(() {
-//                        print(value);
-//                        _progress = value;
-//                        _curPosion = (value * _chapters.length).floor();
-//                        _getChapterData();
-                      });
-                    },
-                  ),
-                ),
-              ),
-              FlatButton(
-                onPressed: () {
-                  _loadNext();
-                },
-                child: Text(
-                  "下一章",
-                  style: TextStyle(
-                    color: _isDayMode
-                        ? AppColors.DayModeIconTitleButtonColor
-                        : AppColors.NightModeIconTitleButtonColor,
-                  ),
-                ),
-              )
-            ],
-          ),
-          Builder(
-            builder: (context) => Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: <Widget>[
-                iconTitle(context, Icons.menu, "目录", 0),
-                iconTitle(context, Icons.tonality, _isDayMode ? "夜间" : "日间", 1),
-                iconTitle(context, Icons.text_format, "设置", 2),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  onPageChanged(int index) {
-    setState(() {
-      _curPage = index;
-    });
+  onTap(Offset position) async {
+    double xRate = position.dx / Screen.width;
+    if (xRate > 0.33 && xRate < 0.66) {
+      SystemChrome.setEnabledSystemUIOverlays(
+          [SystemUiOverlay.top, SystemUiOverlay.bottom]);
+      setState(() {
+        _isShowMenu = true;
+      });
+    } else if (xRate >= 0.66) {
+      nextPage();
+    } else {
+      previousPage();
+    }
   }
 
   Widget buildPage(BuildContext context, int index) {
-    return reader(index);
+    var page = index - (preArticle != null ? preArticle.pageCount : 0);
+    var article;
+    if (page >= this.currentArticle.pageCount) {
+      // 到达下一章了
+      article = nextArticle;
+      page = 0;
+    } else if (page < 0) {
+      // 到达上一章了
+      article = preArticle;
+      page = preArticle.pageCount - 1;
+    } else {
+      article = this.currentArticle;
+    }
+
+    return GestureDetector(
+      onTapUp: (TapUpDetails details) {
+        onTap(details.globalPosition);
+      },
+      child: ReaderView(
+          chapter: article, page: page, topSafeHeight: topSafeHeight),
+    );
   }
 
   Widget buildPageView() {
+    if (currentArticle == null) {
+      return Container();
+    }
+
+    int itemCount = (preArticle != null ? preArticle.pageCount : 0) +
+        currentArticle.pageCount +
+        (nextArticle != null ? nextArticle.pageCount : 0);
+
     return PageView.builder(
       physics: BouncingScrollPhysics(),
       controller: pageController,
-      itemCount: _pageOffsets.length,
+      itemCount: itemCount,
       itemBuilder: buildPage,
       onPageChanged: onPageChanged,
     );
   }
 
+  buildMenu() {
+    if (!_isShowMenu) {
+      return Container();
+    }
+    return ReaderMenu(
+      chapters: _chapters,
+      articleIndex: currentArticle.id,
+      onTap: hideMenu,
+      onPreviousArticle: () {
+        _getChapterData(currentArticle.id - 1, PageJumpType.firstPage);
+      },
+      onNextArticle: () {
+        _getChapterData(currentArticle.id + 1, PageJumpType.firstPage);
+      },
+      onToggleChapter: (Chapter chapter) {
+        _getChapterData(chapter.id, PageJumpType.firstPage);
+      },
+      onTapMenu: tapMenu,
+    );
+  }
+
+  hideMenu() {
+    SystemChrome.setEnabledSystemUIOverlays([]);
+    setState(() {
+      this._isShowMenu = false;
+    });
+  }
+
+  tapMenu(int index) {
+    switch (index) {
+      case 0:
+        scaffoldKey.currentState.openDrawer();
+        break;
+      case 1:
+        setState(() {
+          ReaderConfig.instance.isDayMode = !ReaderConfig.instance.isDayMode;
+        });
+        break;
+      case 2:
+        _isShowMenu = !_isShowMenu;
+        _isShowMenu
+            ? SystemChrome.setEnabledSystemUIOverlays(
+                [SystemUiOverlay.top, SystemUiOverlay.bottom])
+            : SystemChrome.setEnabledSystemUIOverlays([]);
+        showSheet(context);
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return _content == ''
-        ? LoadingPage()
-        : Scaffold(
-            backgroundColor: _isDayMode
-                ? AppColors.DayModeBgColor
-                : AppColors.NightModeBgColor,
-            drawer: new Drawer(
-              child: CatalogPageLocal(
-                widget.filePath,
-                _chapters,
-                callBack1: (Chapter chapter) => onChange1(chapter),
-              ),
-            ),
-            body: Stack(
-              children: <Widget>[
-                buildPageView(),
-                _isShowMenu
-                    ? Positioned(
-                        child: _topMenu(),
-                        top: 0,
-                      )
-                    : Container(),
-                _isShowMenu
-                    ? Positioned(
-                        child: _bottomMenu(),
-                        bottom: 0,
-                      )
-                    : Container(),
-              ],
-            ),
-          );
+    if (currentArticle == null || _chapters == null) {
+      return LoadingPage();
+    }
+
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: ReaderConfig.instance.bgColor,
+      drawer: new Drawer(
+        child: CatalogPageLocal(
+          widget.filePath,
+          _chapters,
+          callBack1: (Chapter chapter) => onChange1(chapter),
+        ),
+      ),
+      body: Stack(children: <Widget>[
+        buildPageView(),
+        buildMenu(),
+      ]),
+    );
   }
 
   @override

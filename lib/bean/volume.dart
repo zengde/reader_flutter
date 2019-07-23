@@ -27,6 +27,10 @@ class Chapter extends AdsorptionData {
   bool isHeader;
   int headerId;
   String content = '';
+  List<Map<String, int>> pageOffsets;
+  int start;
+  int end;
+  int index;
 
   Chapter({this.name, this.isHeader, this.headerId});
 
@@ -38,6 +42,16 @@ class Chapter extends AdsorptionData {
     listBean.hasContent = map['hasContent'];
     listBean.isHeader = false;
     listBean.headerId = -1;
+    listBean.index = map['index'] ?? 0;
     return listBean;
+  }
+
+  String stringAtPageIndex(int index) {
+    var offset = pageOffsets[index];
+    return this.content.substring(offset['start'], offset['end']);
+  }
+
+  int get pageCount {
+    return pageOffsets?.length;
   }
 }

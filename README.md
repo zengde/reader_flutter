@@ -5,12 +5,13 @@
 
     下载体验地址：https://www.pgyer.com/CJrf
 #   预览
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/1.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/2.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/3.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/4.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/5.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/6.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/7.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/8.png)
-![image](https://github.com/lycstar/reader_flutter/blob/master/preview/9.png)
+![image](preview/1.png)
+![image](preview/1.2.png)
+![image](preview/2.png)
+![image](preview/3.png)
+![image](preview/4.png)
+![image](preview/5.png)
+![image](preview/6.png)
+![image](preview/7.png)
+![image](preview/8.png)
+![image](preview/9.png)
