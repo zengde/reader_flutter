@@ -1,8 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:gbk_codec/gbk_codec.dart';
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/mark.dart';
 import 'package:reader_flutter/bean/volume.dart';
@@ -20,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'catalog_local.dart';
 import 'reader/reader_menu.dart';
 import 'reader/reader_view.dart';
+import 'reader/reader_engine.dart';
 
 enum PageJumpType { stay, firstPage, lastPage }
 
@@ -61,90 +60,12 @@ class _ReadPageState extends State<ReadPageLocal>
   _getChaptersData() async {
     await Future.delayed(const Duration(milliseconds: 100), () {});
     topSafeHeight = Screen.topSafeHeight;
-    String filePath = widget.filePath;
-
-    /*
-    String fileMd5 = md5.convert(filePath.codeUnits).toString() + '.json';
-    Directory appDirectory = await getApplicationDocumentsDirectory();
-    File chapterFile = new File(p.join(appDirectory.path, fileMd5));
-    if (chapterFile.existsSync()) {
-      var responseStr = chapterFile.readAsStringSync();
-      var responseJson = json.decode(responseStr);
-      return responseJson['chapters'];
-    }
-    */
-
-    try {
-      RegExp volumeExp = RegExp(
-          r'^[\s\t　]*(第?[0-9零一二三四五六七八九十]+卷|卷[0-9零一二三四五六七八九十]+)\s*.{0,20}$',
-          unicode: true);
-      RegExp chpterExp = RegExp(
-          r'^[\s\t　]*第?[0-9零一二三四五六七八九十序百千]+[章节回话]\s*.{0,20}$',
-          unicode: true);
-      RegExp empty = RegExp(r'^[\s　\t]*$');
-
-      int k = -1;
-      bool iscn = false;
-      String _full = '';
-
-      final file = new File('$filePath');
-      Stream<List<int>> inputStream = file.openRead();
-
-      Utf8Codec _utf8 = Utf8Codec(allowMalformed: true);
-      inputStream
-          .map((List<int> input) {
-            return _book.charset == 'utf8'
-                ? input
-                : utf8.encode(gbk_bytes.decode(input));
-          })
-          .transform(_utf8.decoder) // Decode bytes to UTF-8. gbk.decoder
-          .transform(new LineSplitter()) // Convert stream to individual lines.
-          .listen((String line) {
-            if (line == '') {
-              return;
-            }
-            if (volumeExp.hasMatch(line)) {
-              k++;
-              Iterable<RegExpMatch> volumeMatches = volumeExp.allMatches(line);
-              _chapters.insert(
-                  k,
-                  Chapter.fromMap({
-                    'name': volumeMatches.elementAt(0).group(0),
-                    'isHeader': true,
-                    'id': k,
-                    'headerId': k
-                  }));
-              iscn = false;
-            } else if (chpterExp.hasMatch(line)) {
-              k++;
-              Iterable<RegExpMatch> chapterMatches = chpterExp.allMatches(line);
-              _chapters.insert(
-                  k,
-                  Chapter.fromMap({
-                    'name': chapterMatches.elementAt(0).group(0),
-                    'isHeader': false,
-                    'id': k
-                  }));
-              iscn = true;
-            } else {
-              if (iscn) {
-                _chapters[k].content = _chapters[k].content + line + "\r\n";
-              }
-            }
-            _full += line + "\r\n";
-          }, onDone: () {
-            if (_chapters.length < 1) {
-              _chapters.insert(0, new Chapter(name: '全文', isHeader: false));
-              _chapters[0].content = _full;
-            }
-            _getChapterData(_curPosition, PageJumpType.stay);
-            print('File is now closed.');
-          }, onError: (e) {
-            print(e.toString());
-          });
-    } catch (err) {
-      print(err);
-    }
+    print('start' + DateTime.now().toString());
+    // compute延迟
+    _chapters = await compute(decodeText, {'filePath': widget.filePath, 'charSet': _book.charset});
+    //_chapters = decodeText({'filePath': widget.filePath, 'charSet': _book.charset});
+    print('end' + DateTime.now().toString());
+    _getChapterData(_curPosition, PageJumpType.stay);
   }
 
   _getChapterData(int chapterId, PageJumpType jumpType) {
@@ -154,7 +75,7 @@ class _ReadPageState extends State<ReadPageLocal>
     } else {
       preArticle = null;
     }
-    if (chapterId < _chapters.length) {
+    if (chapterId < _chapters.length - 1) {
       nextArticle = fetchChapter(chapterId + 1);
     } else {
       nextArticle = null;
@@ -172,10 +93,14 @@ class _ReadPageState extends State<ReadPageLocal>
     setState(() {
       print("阅读位置$_curPosition");
       print("页数${currentArticle.pageCount}");
+      print(DateTime.now());
     });
   }
 
   Chapter fetchChapter(int chapterId) {
+    if (chapterId > _chapters.length - 1) {
+      return null;
+    }
     var tempContent = _chapters[chapterId].content;
     if (_chapters[chapterId].pageCount == null) {
       _chapters[chapterId].pageOffsets =
@@ -545,7 +470,8 @@ class _ReadPageState extends State<ReadPageLocal>
     int itemCount = (preArticle != null ? preArticle.pageCount : 0) +
         currentArticle.pageCount +
         (nextArticle != null ? nextArticle.pageCount : 0);
-
+    print('build page');
+    print(DateTime.now());
     return PageView.builder(
       physics: BouncingScrollPhysics(),
       controller: pageController,
