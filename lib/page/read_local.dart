@@ -55,15 +55,16 @@ class _ReadPageState extends State<ReadPageLocal>
   Chapter preArticle;
   Chapter nextArticle;
   final GlobalKey<ScaffoldState> scaffoldKey = new GlobalKey<ScaffoldState>();
+  ReaderEngine lightEngine;
 
   // _getChaptersData(start,end) openRead(start,end)
   _getChaptersData() async {
     await Future.delayed(const Duration(milliseconds: 100), () {});
     topSafeHeight = Screen.topSafeHeight;
     print('start' + DateTime.now().toString());
-    // compute延迟
-    _chapters = await compute(decodeText, {'filePath': widget.filePath, 'charSet': _book.charset});
-    //_chapters = decodeText({'filePath': widget.filePath, 'charSet': _book.charset});
+    lightEngine = new ReaderEngine(book: _book, stateSetter: setState);
+    await lightEngine.refreshChapterList();
+    _chapters = lightEngine.mChapterList;
     print('end' + DateTime.now().toString());
     _getChapterData(_curPosition, PageJumpType.stay);
   }
@@ -101,7 +102,8 @@ class _ReadPageState extends State<ReadPageLocal>
     if (chapterId > _chapters.length - 1) {
       return null;
     }
-    var tempContent = _chapters[chapterId].content;
+    var tempContent = lightEngine.getContentWithFile(_chapters[chapterId]);
+    _chapters[chapterId].content=tempContent;
     if (_chapters[chapterId].pageCount == null) {
       _chapters[chapterId].pageOffsets =
           ReaderPageAgent.getPageOffsets(tempContent, topSafeHeight);
@@ -130,6 +132,7 @@ class _ReadPageState extends State<ReadPageLocal>
     pageController.dispose();
     SystemChrome.setEnabledSystemUIOverlays(
         [SystemUiOverlay.top, SystemUiOverlay.bottom]);
+    lightEngine.close();
     super.dispose();
   }
 

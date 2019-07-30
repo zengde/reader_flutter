@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:path/path.dart';
 import 'package:reader_flutter/util/file_utils.dart';
 import 'package:reader_flutter/util/util.dart';
@@ -117,9 +118,13 @@ class Book {
       book.img = 'assets/images/cover_txt.png';
       book.name = getFileBaseName(file);
       book.path = file.path;
-      book.updateTime = new DateTime.now().toIso8601String();
+      book.updateTime = new DateFormat('MM/dd/y HH:mm:ss').format(DateTime.now());
       book.isLocal = true;
-      if (file is File) book.charset = mcharsetDetector(file.openSync());
+      if (file is File) {
+        book.charset = mcharsetDetector(file.openSync());
+        DateTime last=file.lastModifiedSync();
+        book.updateTime = new DateFormat('MM/dd/y HH:mm:ss').format(last);
+      }
       print(book.charset);
     }
     return book;

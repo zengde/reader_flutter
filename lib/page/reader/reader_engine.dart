@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show required, compute, ValueChanged, VoidCallback;
+import 'package:flutter/foundation.dart';
 import 'package:gbk_codec/gbk_codec.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/volume.dart';
 import 'package:reader_flutter/util/file_utils.dart';
@@ -13,7 +15,19 @@ class ReaderEngine {
   static Map<Book, ReaderEngine> _cache;
   final ValueChanged<VoidCallback> _stateSetter;
   final Book _book;
-  List<Chapter> chapters;
+  List<Chapter> mChapterList;
+  final int bufferSize = 512 * 1024;
+  final int maxLengthWithNoChapter = 10 * 1024;
+  RegExp volumeExp = RegExp(
+      r'^[\s\t　]*(第?[0-9零一二三四五六七八九十]+卷|卷[0-9零一二三四五六七八九十]+)\s*.{0,20}$',
+      unicode: true,
+      multiLine: true);
+  RegExp chpterExp = RegExp(r'^[\s\t　]*第?[0-9零一二三四五六七八九十序百千]+[章节回话]\s*.{0,20}$',
+      unicode: true, multiLine: true);
+  RegExp empty = RegExp(r'^[\s　\t]*$');
+  File mBookFile;
+  Encoding mCharset;
+  final ChapterSqlite _chapterSqlite = ChapterSqlite();
 
   factory ReaderEngine(
       {@required Book book, @required ValueChanged<VoidCallback> stateSetter}) {
@@ -31,11 +45,243 @@ class ReaderEngine {
       : assert(null != book),
         assert(null != stateSetter),
         _book = book,
-        _stateSetter = stateSetter;
+        _stateSetter = stateSetter {
+    mBookFile = new File(_book.path);
+    mCharset = _book.charset == 'utf8' ? utf8 : gbk_bytes;
+  }
 
-  Future<List<Chapter>> getChapters() async {
+  void refreshChapterList() async {
+    String lastModified =
+        new DateFormat('MM/dd/y HH:mm:ss').format(mBookFile.lastModifiedSync());
+
+    // 判断文件是否已经加载过，并具有缓存
+    if (_book.updateTime == lastModified) {
+      mChapterList = await _chapterSqlite.queryAll();
+    }
+    if (mChapterList != null) return;
+
+    loadChapters();
+    _chapterSqlite.insertAll(mChapterList);
+  }
+
+  void loadChapters() {
+    List<Chapter> chapters = [];
+    //获取文件流
+    RandomAccessFile bookStream = mBookFile.openSync(mode: FileMode.read);
+    //寻找匹配文章标题的正则表达式，判断是否存在章节名
+    bool hasChapter = true; //checkChapterType(bookStream);
+    //加载章节
+    List<int> buffer = new List<int>(bufferSize);
+    //获取到的块起始点，在文件中的位置
+    int curOffset = 0;
+    //block的个数
+    int blockPos = 0;
+    //读取的长度
+    int length;
+
+    //获取文件中的数据到buffer，直到没有数据为止
+    while ((length = bookStream.readIntoSync(buffer, 0, buffer.length)) > 0) {
+      ++blockPos;
+      //如果存在Chapter
+      if (hasChapter) {
+        //将数据转换成String
+        var tempBuffer = new List<int>(length)..setRange(0, length, buffer);
+
+        String blockContent = mCharset.decode(tempBuffer);
+
+        //当前Block下使过的String的指针
+        int seekPos = 0;
+
+        //如果存在相应章节
+        if (chpterExp.hasMatch(blockContent)) {
+          chpterExp.allMatches(blockContent)
+            ..forEach((RegExpMatch matcher) {
+              //获取匹配到的字符在字符串中的起始位置
+              int chapterStart = matcher.start;
+
+              //如果 seekPos == 0 && nextChapterPos != 0 表示当前block处前面有一段内容
+              //第一种情况一定是序章 第二种情况可能是上一个章节的内容
+              if (seekPos == 0 && chapterStart != 0) {
+                //获取当前章节的内容
+                String chapterContent =
+                    blockContent.substring(seekPos, chapterStart);
+                //设置指针偏移
+                seekPos += chapterContent.length;
+
+                //如果当前对整个文件的偏移位置为0的话，那么就是序章
+                if (curOffset == 0) {
+                  //创建序章
+                  Chapter preChapter = new Chapter();
+                  preChapter.name = "序章";
+                  preChapter.start = 0;
+                  preChapter.end = mCharset
+                      .encode(chapterContent)
+                      .length; //获取String的byte值,作为最终值
+
+                  //如果序章大小大于30才添加进去
+                  if (preChapter.end - preChapter.start > 30) {
+                    chapters.add(preChapter);
+                  }
+
+                  //创建当前章节
+                  Chapter curChapter = new Chapter();
+                  curChapter.name = matcher.group(0).trim();
+                  curChapter.start = preChapter.end;
+                  chapters.add(curChapter);
+                }
+                //否则就block分割之后，上一个章节的剩余内容
+                else {
+                  //获取上一章节
+                  Chapter lastChapter = chapters.last;
+                  //将当前段落添加上一章去
+                  lastChapter.end += mCharset.encode(chapterContent).length;
+
+                  //如果章节内容太小，则移除
+                  if (lastChapter.end - lastChapter.start < 30) {
+                    chapters.remove(lastChapter);
+                  }
+
+                  //创建当前章节
+                  Chapter curChapter = new Chapter();
+                  curChapter.name = matcher.group(0).trim();
+                  curChapter.start = lastChapter.end;
+                  chapters.add(curChapter);
+                }
+              } else {
+                //是否存在章节
+                if (chapters.length != 0) {
+                  //获取章节内容
+                  String chapterContent =
+                      blockContent.substring(seekPos, matcher.start);
+                  seekPos += chapterContent.length;
+
+                  //获取上一章节
+                  Chapter lastChapter = chapters.last;
+                  lastChapter.end = lastChapter.start +
+                      mCharset.encode(chapterContent).length;
+
+                  //如果章节内容太小，则移除
+                  if (lastChapter.end - lastChapter.start < 30) {
+                    chapters.remove(lastChapter);
+                  }
+
+                  //创建当前章节
+                  Chapter curChapter = new Chapter();
+                  curChapter.name = matcher.group(0).trim();
+                  curChapter.start = lastChapter.end;
+                  chapters.add(curChapter);
+                }
+                //如果章节不存在则创建章节
+                else {
+                  Chapter curChapter = new Chapter();
+                  curChapter.name = matcher.group(0).trim();
+                  curChapter.start = 0;
+                  chapters.add(curChapter);
+                }
+              }
+            });
+        }
+      }
+      //进行本地虚拟分章
+      else {
+        //章节在buffer的偏移量
+        int chapterOffset = 0;
+        //当前剩余可分配的长度
+        int strLength = length;
+        //分章的位置
+        int chapterPos = 0;
+
+        while (strLength > 0) {
+          ++chapterPos;
+          //是否长度超过一章
+          if (strLength > maxLengthWithNoChapter) {
+            //在buffer中一章的终止点
+            int end = length;
+            //寻找换行符作为终止点
+            for (int i = chapterOffset + maxLengthWithNoChapter;
+                i < length;
+                ++i) {
+              if (buffer[i] == ''.codeUnitAt(0)) {
+                end = i;
+                break;
+              }
+            }
+            Chapter chapter = new Chapter();
+            chapter.name = "第" +
+                blockPos.toString() +
+                "章" +
+                "(" +
+                chapterPos.toString() +
+                ")";
+            chapter.start = curOffset + chapterOffset + 1;
+            chapter.end = curOffset + end;
+            chapters.add(chapter);
+            //减去已经被分配的长度
+            strLength = strLength - (end - chapterOffset);
+            //设置偏移的位置
+            chapterOffset = end;
+          } else {
+            Chapter chapter = new Chapter();
+            chapter.name = "第" +
+                blockPos.toString() +
+                "章" +
+                "(" +
+                chapterPos.toString() +
+                ")";
+            chapter.start = curOffset + chapterOffset + 1;
+            chapter.end = curOffset + length;
+            chapters.add(chapter);
+            strLength = 0;
+          }
+        }
+      }
+
+      //block的偏移点
+      curOffset += length;
+
+      if (hasChapter) {
+        //设置上一章的结尾
+        Chapter lastChapter = chapters.last;
+        lastChapter.end = curOffset;
+      }
+
+      //当添加的block太多的时候，执行GC
+      if (blockPos % 15 == 0) {}
+    }
+
+    mChapterList = chapters;
+    bookStream.closeSync();
+  }
+
+  String getContentWithFile(Chapter chapter) {
+    RandomAccessFile bookStream;
+    try {
+      bookStream = mBookFile.openSync(mode: FileMode.read);
+      bookStream.setPositionSync(chapter.start);
+      int extent = chapter.end - chapter.start;
+      List<int> content = new List<int>(extent);
+      bookStream.readIntoSync(content, 0, extent);
+      return mCharset.decode(content);
+    } catch (e) {
+      print(e);
+    } finally {
+      bookStream.close();
+    }
+
+    return '';
+  }
+
+  void close() {
+    _cache[_book] = null;
+    _chapterSqlite.close();
+  }
+
+  ///
+  /// unuse
+  ///
+  Future<List<Chapter>> loadChaptersWithIso() async {
     if (_book.isLocal) {
-      var type = getFileType(new File(_book.path));
+      var type = getFileType(mBookFile);
       var func;
       switch (type) {
         case FileType.TEXT:
@@ -47,7 +293,7 @@ class ReaderEngine {
           throw new Exception('暂时不支持此格式！');
           break;
       }
-      chapters = await compute(
+      mChapterList = await compute(
           func, {'filePath': _book.path, 'charSet': _book.charset});
     } else {
       var map = await getChaptersData(_book.id);
@@ -56,25 +302,34 @@ class ReaderEngine {
         _volumes.add(Volume.fromMap(map['data']['list'][i]));
       }
       for (int i = 0; i < _volumes.length; i++) {
-        chapters
+        mChapterList
             .add(Chapter(name: _volumes[i].name, isHeader: true, headerId: i));
-        chapters.addAll(_volumes[i].list);
+        mChapterList.addAll(_volumes[i].list);
       }
     }
 
-    return chapters;
+    return mChapterList;
   }
 
+  ///
+  /// unuse
+  ///
   Future<String> getContent(int index) async {
     if (_book.isLocal) {
-      return chapters[index].content;
+      return mChapterList[index].content;
     } else {
-      var data = await getChapterData(_book.id, chapters[index].id.toString());
+      var data =
+          await getChapterData(_book.id, mChapterList[index].id.toString());
       return data['data']['content'];
     }
   }
 }
 
+/// compute有延迟
+/// 
+/// _chapters = await compute(decodeText, {'filePath': widget.filePath, 'charSet': _book.charset});
+/// 
+/// _chapters = decodeText({'filePath': widget.filePath, 'charSet': _book.charset});
 List<Chapter> decodeText(Map<String, String> param) {
   print('startdecode' + DateTime.now().toString());
   List<Chapter> chapters = [];

@@ -63,7 +63,7 @@ class _CatalogPageLocalState extends State<CatalogPageLocal>
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            chapter.name,
+            chapter.name.trim(),
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
