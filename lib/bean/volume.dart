@@ -14,6 +14,7 @@ final String columnContent = 'content';
 final String columnStart = 'start';
 final String columnEnd = 'end';
 final String columnIndex = 'orderss';
+final String columnBookId = 'bookid';
 
 class Volume {
   String name;
@@ -44,6 +45,7 @@ class Chapter extends AdsorptionData {
   int start;
   int end;
   int index;
+  int bookid;
 
   Chapter({this.name, this.isHeader = false, this.headerId});
 
@@ -55,10 +57,11 @@ class Chapter extends AdsorptionData {
     listBean.hasContent = map['hasContent'];
     listBean.isHeader = map['isHeader'] == null ? false : map['isHeader'] == 1;
     listBean.headerId = map['headerId'] ?? -1;
-    listBean.index = map['index'] ?? 0;
+    listBean.index = map[columnIndex] ?? 0;
     listBean.start = map['start'] ?? 0;
     listBean.end = map['end'] ?? 0;
     listBean.content = map['content'] ?? '';
+    listBean.bookid = map['bookid'] ?? 0;
     return listBean;
   }
 
@@ -71,6 +74,18 @@ class Chapter extends AdsorptionData {
     return pageOffsets?.length;
   }
 
+  int get preId {
+    return index - 1;
+  }
+
+  int get nextId {
+    return index + 1;
+  }
+
+  int get fakeid {
+    return 1000000 + index;
+  }
+
   Map<String, dynamic> toMap() {
     var map = <String, dynamic>{
       columnName: name,
@@ -80,7 +95,8 @@ class Chapter extends AdsorptionData {
       columnContent: content,
       columnStart: start,
       columnEnd: end,
-      columnIndex: index
+      columnIndex: index,
+      columnBookId: bookid
     };
     if (id != null) {
       map[columnId] = id;
@@ -98,7 +114,7 @@ class ChapterSqlite {
     String path = join(databasesPath, 'chapter.db');
 
 //根据数据库文件路径和数据库版本号创建数据库表
-    db = await openDatabase(path, version: 4,
+    db = await openDatabase(path, version: 5,
         onCreate: (Database db, int version) async {
       await db.execute('''
           CREATE TABLE $tableBook (
@@ -110,8 +126,11 @@ class ChapterSqlite {
             $columnContent TEXT, 
             $columnStart INTEGER, 
             $columnEnd INTEGER,
-            $columnIndex INTEGER)
+            $columnIndex INTEGER,
+            $columnBookId INTEGER)
           ''');
+    }, onUpgrade: (Database db, int oldVersion,int newVersion) async {
+      await db.execute("ALTER TABLE $tableBook ADD $columnBookId INTEGER");
     });
   }
 
@@ -120,29 +139,36 @@ class ChapterSqlite {
     return await db.insert(tableBook, chapter.toMap());
   }
 
-  Future<int> insertAll(List<Chapter> chapters) async {
+  Future<int> insertAll(List<Chapter> chapters, int bookid) async {
     await this.openSqlite();
     Batch batch = db.batch();
-    chapters.forEach((chapter) {
+    Map<int, Chapter> map = chapters.asMap();
+    map.forEach((index, chapter) {
+      chapter.bookid = bookid;
+      chapter.index = index;
       batch.insert(tableBook, chapter.toMap());
     });
     var results = await batch.commit();
     return results.length;
   }
 
-  Future<List<Chapter>> queryAll() async {
+  Future<List<Chapter>> queryAll(int bookid) async {
     await this.openSqlite();
-    List<Map> maps = await db.query(tableBook, columns: [
-      columnId,
-      columnName,
-      columnHasContent,
-      columnIsHeader,
-      columnHeaderId,
-      columnContent,
-      columnStart,
-      columnEnd,
-      columnIndex
-    ]);
+    List<Map> maps = await db.query(tableBook,
+        columns: [
+          columnId,
+          columnName,
+          columnHasContent,
+          columnIsHeader,
+          columnHeaderId,
+          columnContent,
+          columnStart,
+          columnEnd,
+          columnIndex,
+          columnBookId
+        ],
+        where: '$columnBookId = ?',
+        whereArgs: [bookid]);
 
     if (maps == null || maps.length == 0) {
       return null;

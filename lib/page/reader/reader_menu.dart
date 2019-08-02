@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/mark.dart';
@@ -12,6 +11,7 @@ import 'dart:async';
 import 'package:reader_flutter/util/util.dart';
 
 class ReaderMenu extends StatefulWidget {
+  final Book book;
   final List<Chapter> chapters;
   final int articleIndex;
 
@@ -22,7 +22,8 @@ class ReaderMenu extends StatefulWidget {
   final void Function(Chapter chapter) onToggleChapter;
 
   ReaderMenu(
-      {this.chapters,
+      {this.book,
+      this.chapters,
       this.articleIndex,
       this.onTap,
       this.onPreviousArticle,
@@ -65,7 +66,7 @@ class _ReaderMenuState extends State<ReaderMenu>
     progressValue =
         this.widget.articleIndex / (this.widget.chapters.length - 1);
   }
-  
+
   @override
   void dispose() {
     animationController.dispose();
@@ -116,23 +117,22 @@ class _ReaderMenuState extends State<ReaderMenu>
                         Icon(_isMark ? Icons.bookmark : Icons.bookmark_border),
                     onPressed: () {
                       Chapter chapter = widget.chapters[widget.articleIndex];
-                      /*
-                      if (!_isAdd) {
-                        toast("请先添加到书架");
-                      } else if (_isAdd && !_isMark) {
+
+                      if (!_isMark) {
                         BookMark bookMark = BookMark();
-                        bookMark.bookId = widget.bookId;
+                        bookMark.bookId = widget.book.id;
                         bookMark.chapterName = chapter.name;
-                        bookMark.chapterId = chapter.id;
+                        bookMark.chapterId = chapter.index;
                         var now = new DateTime.now();
                         var formatter = DateFormat('yyyy-MM-dd  HH:mm:ss');
                         bookMark.addTime = formatter.format(now);
                         bookMark.desc = "";
                         _bookMarkSqlite.insert(bookMark);
                       } else if (_isMark) {
-                        _bookMarkSqlite.deleteByChapterId(chapter.id);
+                        _bookMarkSqlite.deleteByChapterId(
+                            chapter.index, widget.book.id);
                       }
-                      _updateBookMark();*/
+                      _updateBookMark();
                     },
                   )
           ],
@@ -147,6 +147,16 @@ class _ReaderMenuState extends State<ReaderMenu>
 
   int currentArticleIndex() {
     return ((this.widget.chapters.length - 1) * progressValue).toInt();
+  }
+
+  void _updateBookMark() {
+    _bookMarkSqlite
+        .queryBookMarkIsAdd(currentArticleIndex(), widget.book.id)
+        .then((bool) {
+      setState(() {
+        _isMark = bool;
+      });
+    });
   }
 
   buildProgressTipView() {

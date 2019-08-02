@@ -8,6 +8,7 @@ import 'package:gbk_codec/gbk_codec.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/volume.dart';
+import 'package:reader_flutter/page/reader/reader_page_agent.dart';
 import 'package:reader_flutter/util/file_utils.dart';
 import 'package:reader_flutter/util/http_manager.dart';
 
@@ -28,40 +29,47 @@ class ReaderEngine {
   File mBookFile;
   Encoding mCharset;
   final ChapterSqlite _chapterSqlite = ChapterSqlite();
+  double topSafeHeight;
 
   factory ReaderEngine(
-      {@required Book book, @required ValueChanged<VoidCallback> stateSetter}) {
+      {@required Book book,
+      @required ValueChanged<VoidCallback> stateSetter,
+      double topSafeHeight}) {
 //    if (null == _cache) {
     _cache = <Book, ReaderEngine>{};
 //    }
     if (!_cache.containsKey(book)) {
-      _cache[book] =
-          new ReaderEngine._internal(book: book, stateSetter: stateSetter);
+      _cache[book] = new ReaderEngine._internal(
+          book: book, stateSetter: stateSetter, topSafeHeight: topSafeHeight);
     }
     return _cache[book];
   }
 
-  ReaderEngine._internal({Book book, ValueChanged<VoidCallback> stateSetter})
+  ReaderEngine._internal(
+      {Book book, ValueChanged<VoidCallback> stateSetter, double topSafeHeight})
       : assert(null != book),
         assert(null != stateSetter),
         _book = book,
-        _stateSetter = stateSetter {
+        _stateSetter = stateSetter,
+        topSafeHeight = topSafeHeight {
     mBookFile = new File(_book.path);
     mCharset = _book.charset == 'utf8' ? utf8 : gbk_bytes;
   }
 
   void refreshChapterList() async {
+    if (mChapterList != null) return;
+    
     String lastModified =
         new DateFormat('MM/dd/y HH:mm:ss').format(mBookFile.lastModifiedSync());
 
     // 判断文件是否已经加载过，并具有缓存
     if (_book.updateTime == lastModified) {
-      mChapterList = await _chapterSqlite.queryAll();
+      mChapterList = await _chapterSqlite.queryAll(_book.id);
     }
     if (mChapterList != null) return;
 
     loadChapters();
-    _chapterSqlite.insertAll(mChapterList);
+    _chapterSqlite.insertAll(mChapterList, _book.id);
   }
 
   void loadChapters() {
@@ -78,6 +86,8 @@ class ReaderEngine {
     int blockPos = 0;
     //读取的长度
     int length;
+    //分章的位置
+    int chapterPos = 0;
 
     //获取文件中的数据到buffer，直到没有数据为止
     while ((length = bookStream.readIntoSync(buffer, 0, buffer.length)) > 0) {
@@ -117,17 +127,21 @@ class ReaderEngine {
                   preChapter.end = mCharset
                       .encode(chapterContent)
                       .length; //获取String的byte值,作为最终值
+                  preChapter.index = chapterPos;
 
                   //如果序章大小大于30才添加进去
                   if (preChapter.end - preChapter.start > 30) {
                     chapters.add(preChapter);
+                    chapterPos++;
                   }
 
                   //创建当前章节
                   Chapter curChapter = new Chapter();
                   curChapter.name = matcher.group(0).trim();
                   curChapter.start = preChapter.end;
+                  curChapter.index = chapterPos;
                   chapters.add(curChapter);
+                  chapterPos++;
                 }
                 //否则就block分割之后，上一个章节的剩余内容
                 else {
@@ -139,13 +153,16 @@ class ReaderEngine {
                   //如果章节内容太小，则移除
                   if (lastChapter.end - lastChapter.start < 30) {
                     chapters.remove(lastChapter);
+                    chapterPos--;
                   }
 
                   //创建当前章节
                   Chapter curChapter = new Chapter();
                   curChapter.name = matcher.group(0).trim();
                   curChapter.start = lastChapter.end;
+                  curChapter.index = chapterPos;
                   chapters.add(curChapter);
+                  chapterPos++;
                 }
               } else {
                 //是否存在章节
@@ -163,20 +180,25 @@ class ReaderEngine {
                   //如果章节内容太小，则移除
                   if (lastChapter.end - lastChapter.start < 30) {
                     chapters.remove(lastChapter);
+                    chapterPos--;
                   }
 
                   //创建当前章节
                   Chapter curChapter = new Chapter();
                   curChapter.name = matcher.group(0).trim();
                   curChapter.start = lastChapter.end;
+                  curChapter.index = chapterPos;
                   chapters.add(curChapter);
+                  chapterPos++;
                 }
                 //如果章节不存在则创建章节
                 else {
                   Chapter curChapter = new Chapter();
                   curChapter.name = matcher.group(0).trim();
                   curChapter.start = 0;
+                  curChapter.index = chapterPos;
                   chapters.add(curChapter);
+                  chapterPos++;
                 }
               }
             });
@@ -188,8 +210,6 @@ class ReaderEngine {
         int chapterOffset = 0;
         //当前剩余可分配的长度
         int strLength = length;
-        //分章的位置
-        int chapterPos = 0;
 
         while (strLength > 0) {
           ++chapterPos;
@@ -215,6 +235,7 @@ class ReaderEngine {
                 ")";
             chapter.start = curOffset + chapterOffset + 1;
             chapter.end = curOffset + end;
+            chapter.index = chapterPos - 1;
             chapters.add(chapter);
             //减去已经被分配的长度
             strLength = strLength - (end - chapterOffset);
@@ -230,6 +251,7 @@ class ReaderEngine {
                 ")";
             chapter.start = curOffset + chapterOffset + 1;
             chapter.end = curOffset + length;
+            chapter.index = chapterPos - 1;
             chapters.add(chapter);
             strLength = 0;
           }
@@ -274,6 +296,23 @@ class ReaderEngine {
   void close() {
     _cache[_book] = null;
     _chapterSqlite.close();
+  }
+
+  int get chapterCount {
+    return mChapterList.length;
+  }
+
+  operator [](int index) {
+    if (index < 0 || index > chapterCount - 1) {
+      return null;
+    }
+    var chapter = mChapterList[index];
+    if (chapter.pageCount == null) {
+      chapter.content = getContentWithFile(chapter);
+      chapter.pageOffsets =
+          ReaderPageAgent.getPageOffsets(chapter.content, topSafeHeight);
+    }
+    return chapter;
   }
 
   ///
@@ -326,9 +365,9 @@ class ReaderEngine {
 }
 
 /// compute有延迟
-/// 
+///
 /// _chapters = await compute(decodeText, {'filePath': widget.filePath, 'charSet': _book.charset});
-/// 
+///
 /// _chapters = decodeText({'filePath': widget.filePath, 'charSet': _book.charset});
 List<Chapter> decodeText(Map<String, String> param) {
   print('startdecode' + DateTime.now().toString());

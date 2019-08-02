@@ -4,9 +4,14 @@ import 'package:reader_flutter/page/acount.dart';
 import 'package:reader_flutter/page/home.dart';
 import 'package:reader_flutter/page/import_local.dart';
 import 'package:reader_flutter/page/search.dart';
+import 'package:catcher/catcher_plugin.dart';
 
 void main() {
-  runApp(MyApp());
+  CatcherOptions releaseOptions = CatcherOptions(SilentReportMode(), [
+    ToastHandler()
+  ]);
+  Catcher(MyApp(), releaseConfig: releaseOptions);
+
   SystemUiOverlayStyle systemUiOverlayStyle =
       SystemUiOverlayStyle(statusBarColor: Colors.transparent);
   SystemChrome.setSystemUIOverlayStyle(systemUiOverlayStyle);
@@ -31,6 +36,7 @@ class MyApp extends StatelessWidget {
         '/search': (_) => SearchPage(),
         '/importLocal': (_) => ImportLocal()
       },
+      navigatorKey: Catcher.navigatorKey,
     );
   }
 }

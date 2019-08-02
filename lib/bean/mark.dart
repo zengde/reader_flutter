@@ -123,7 +123,7 @@ class BookMarkSqlite {
   }
 
   //  根据章节id查询这章是否有书签
-  Future<bool> queryBookMarkIsAdd(int chapterId) async {
+  Future<bool> queryBookMarkIsAdd(int chapterId, int bookid) async {
     await this.openSqlite();
     List<Map> maps = await db.query(tableBookMark,
         columns: [
@@ -134,8 +134,8 @@ class BookMarkSqlite {
           columnAddTime,
           columnDesc,
         ],
-        where: '$columnChapterId = ?',
-        whereArgs: [chapterId]);
+        where: '$columnChapterId = ? and $columnBookId=?',
+        whereArgs: [chapterId, bookid]);
     if (maps.length > 0) {
       return true;
     }
@@ -143,17 +143,18 @@ class BookMarkSqlite {
   }
 
   // 根据章节id删除书签
-  Future<int> deleteByChapterId(int chapterId) async {
+  Future<int> deleteByChapterId(int chapterId, int bookid) async {
     await this.openSqlite();
     return await db.delete(tableBookMark,
-        where: '$columnChapterId = ?', whereArgs: [chapterId]);
+        where: '$columnChapterId = ? and $columnBookId=?',
+        whereArgs: [chapterId, bookid]);
   }
 
   // 删除书签
-  Future<int> delete(int id) async {
+  Future<int> delete(int id, int bookid) async {
     await this.openSqlite();
-    return await db
-        .delete(tableBookMark, where: '$columnId = ?', whereArgs: [id]);
+    return await db.delete(tableBookMark,
+        where: '$columnId = ? and $columnBookId=?', whereArgs: [id, bookid]);
   }
 
   // 记得及时关闭数据库，防止内存泄漏

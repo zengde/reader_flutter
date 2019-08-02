@@ -103,7 +103,7 @@ class _BookMarkPageState extends State<BookMarkPage>
                 child: new Text("确定"),
                 onPressed: () {
                   setState(() {
-                    bookMarkSqlite.delete(bookMark.id);
+                    bookMarkSqlite.delete(bookMark.id,widget.bookId);
                     Navigator.of(context).pop();
                     _query();
                   });

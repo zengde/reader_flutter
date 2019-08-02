@@ -1,5 +1,6 @@
 import 'package:adsorptionview_flutter/adsorptionview_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:reader_flutter/bean/book.dart';
 import 'package:reader_flutter/bean/volume.dart';
 import 'package:reader_flutter/fragment/book_mark.dart';
 import 'package:reader_flutter/fragment/chapter.dart';
@@ -9,14 +10,14 @@ class CatalogPageLocal extends StatefulWidget {
   @override
   _CatalogPageLocalState createState() => _CatalogPageLocalState();
 
-  final String bookPath;
+  final Book book;
   final List<Chapter> _chapters;
 
   final callBack1;
 
   final callBack2;
 
-  CatalogPageLocal(this.bookPath, this._chapters,
+  CatalogPageLocal(this.book, this._chapters,
       {this.callBack1, this.callBack2});
 }
 
@@ -46,7 +47,7 @@ class _CatalogPageLocalState extends State<CatalogPageLocal>
       Navigator.pushReplacement(context,
           MaterialPageRoute(builder: (BuildContext context) {
         return ReadPageLocal(
-          widget.bookPath,
+          widget.book.path,
           chapter: chapter,
         );
       }));
@@ -78,6 +79,7 @@ class _CatalogPageLocalState extends State<CatalogPageLocal>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -116,16 +118,7 @@ class _CatalogPageLocalState extends State<CatalogPageLocal>
               return Text('正文');
             },
           ),
-          AdsorptionView(
-            itemHeight: 60,
-            adsorptionDatas: widget._chapters,
-            generalItemChild: (Chapter chapter) {
-              return _chapterText(chapter);
-            },
-            headChild: (Chapter chapter) {
-              return Text('正文');
-            },
-          ),
+          BookMarkPage(widget.book.id, widget.callBack2),
         ],
       ),
     );

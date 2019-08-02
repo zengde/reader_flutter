@@ -135,7 +135,7 @@ class _ReadPageState extends State<ReadPage>
           _content = map['data']['content'].toString();
         });
       });
-    if (_content != "" || _content != "卷") _scrollController.jumpTo(0);
+    if (_content != "" && _content != "卷") _scrollController.jumpTo(0);
     _updateBookMark();
     if (_isAdd) {
       _updateReadProgress();
@@ -498,7 +498,12 @@ class _ReadPageState extends State<ReadPage>
   }
 
   void _updateBookMark() {
-    _bookMarkSqlite.queryBookMarkIsAdd(_chapters[_curPosition].id).then((bool) {
+    if (_book == null) return;
+    Chapter curChapter=_chapters[_curPosition];
+    int markid=curChapter.isHeader? curChapter.headerId:curChapter.id;
+    _bookMarkSqlite
+        .queryBookMarkIsAdd(markid, _book.id)
+        .then((bool) {
       setState(() {
         _isMark = bool;
       });
@@ -537,7 +542,8 @@ class _ReadPageState extends State<ReadPage>
                       bookMark.desc = "";
                       _bookMarkSqlite.insert(bookMark);
                     } else if (_isMark) {
-                      _bookMarkSqlite.deleteByChapterId(chapter.id);
+                      _bookMarkSqlite.deleteByChapterId(
+                          chapter.id, widget.bookId);
                     }
                     _updateBookMark();
                   },
@@ -627,14 +633,13 @@ class _ReadPageState extends State<ReadPage>
           ),
           Builder(
             builder: (context) => Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    iconTitle(context, Icons.menu, "目录", 0),
-                    iconTitle(
-                        context, Icons.tonality, _isDayMode ? "夜间" : "日间", 1),
-                    iconTitle(context, Icons.text_format, "设置", 2),
-                  ],
-                ),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                iconTitle(context, Icons.menu, "目录", 0),
+                iconTitle(context, Icons.tonality, _isDayMode ? "夜间" : "日间", 1),
+                iconTitle(context, Icons.text_format, "设置", 2),
+              ],
+            ),
           ),
         ],
       ),
@@ -731,6 +736,7 @@ class _ReadPageState extends State<ReadPage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return _chapters.length == 0
         ? LoadingPage()
         : Scaffold(

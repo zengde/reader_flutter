@@ -12,8 +12,7 @@ class BookShelf extends StatefulWidget {
   _BookShelfState createState() => _BookShelfState();
 }
 
-class _BookShelfState extends State<BookShelf>
-    with AutomaticKeepAliveClientMixin {
+class _BookShelfState extends State<BookShelf> {
   List<Book> _books = [];
   final BookSqlite bookSqlite = BookSqlite();
   bool isListStyle = true;
@@ -58,7 +57,9 @@ class _BookShelfState extends State<BookShelf>
       book.isLocal = true;
       book.lastChapter = '';
       return InkWell(
-        onTap: () {},
+        onTap: () {
+          Navigator.of(context).pushNamed('/importLocal');
+        },
         child: bookShelfItem(book),
       );
     }
@@ -70,7 +71,7 @@ class _BookShelfState extends State<BookShelf>
       onTap: () {
         Navigator.push(context,
             MaterialPageRoute(builder: (BuildContext context) {
-          return book.isLocal ?  ReadPageLocal(book.path):ReadPage(book.id);
+          return book.isLocal ? ReadPageLocal(book.path) : ReadPage(book.id);
         }));
       },
       highlightColor: Colors.black12,
@@ -85,7 +86,9 @@ class _BookShelfState extends State<BookShelf>
     });
     var width = (MediaQuery.of(context).size.width - 15 * 2 - 24 * 2) / 3;
     children.add(GestureDetector(
-      onTap: () {},
+      onTap: () {
+        Navigator.of(context).pushNamed('/importLocal');
+      },
       child: Container(
         width: width,
         height: width / 0.75,
@@ -107,7 +110,7 @@ class _BookShelfState extends State<BookShelf>
       onTap: () {
         Navigator.push(context,
             MaterialPageRoute(builder: (BuildContext context) {
-          return book.isLocal ?  ReadPageLocal(book.path):ReadPage(book.id);
+          return book.isLocal ? ReadPageLocal(book.path) : ReadPage(book.id);
         }));
       },
       child: Container(
@@ -140,6 +143,10 @@ class _BookShelfState extends State<BookShelf>
                 style: TextStyle(fontSize: 14),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
+            Text(
+              '已读 1%',
+              style: TextStyle(fontSize: 10, color: Colors.grey),
+            ),
             SizedBox(height: 25),
           ],
         ),
@@ -389,7 +396,4 @@ class _BookShelfState extends State<BookShelf>
             ),
     );
   }
-
-  @override
-  bool get wantKeepAlive => true;
 }

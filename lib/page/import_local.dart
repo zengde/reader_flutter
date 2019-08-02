@@ -210,7 +210,7 @@ class _ImportLocalState extends State<ImportLocal> {
                         onPressed: () {
                           Navigator.pop(context, true);
                         })
-                  ])).then<bool>((value) {
+                  ])).then<void>((value) {
         if (value) {
           Navigator.pop(context);
         } else {

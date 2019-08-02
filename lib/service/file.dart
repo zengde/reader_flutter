@@ -109,17 +109,20 @@ class FileService {
       }
 
       /// check write permission
-      PermissionStatus permission=await PermissionHandler().checkPermissionStatus(PermissionGroup.storage);
+      PermissionStatus permission = await PermissionHandler()
+          .checkPermissionStatus(PermissionGroup.storage);
 
-      if (permission==PermissionStatus.granted) {
+      if (permission == PermissionStatus.granted) {
         // have write permission
         print('have write permission');
         _havePermission = true;
       } else {
         /// have not wirte permission, request it
         print('have not write permission, request it');
-        Map<PermissionGroup,PermissionStatus> permissions = await PermissionHandler().requestPermissions([PermissionGroup.storage]);
-        if (permissions[PermissionGroup.storage]==PermissionStatus.granted) {
+        Map<PermissionGroup, PermissionStatus> permissions =
+            await PermissionHandler()
+                .requestPermissions([PermissionGroup.storage]);
+        if (permissions[PermissionGroup.storage] == PermissionStatus.granted) {
           print('request external directroy permission successful.');
           _havePermission = true;
         } else {
@@ -140,8 +143,8 @@ class FileService {
 
   /// valid only after checkAppDirectory has been called.
   bool canUp(FileSystemEntity currentEntity) {
-    print('current: $currentEntity root: $rootDirectory ${currentEntity?.path !=
-        rootDirectory.path}');
+    print(
+        'current: $currentEntity root: $rootDirectory ${currentEntity?.path != rootDirectory.path}');
     return null != currentEntity &&
         currentEntity.path != rootDirectory.path &&
         currentEntity.path.length >= rootDirectory.path.length;
@@ -159,13 +162,20 @@ class FileService {
         directory.existsSync() &&
         FileSystemEntity.isDirectorySync(directory.path)) {
       /// signle directory
-      return directory.listSync(recursive: recursive);
+      List<FileSystemEntity> files = directory.listSync(recursive: recursive);
+      files.sort((a, b) {
+        bool dira = FileSystemEntity.isDirectorySync(a.path);
+        bool dirb = FileSystemEntity.isDirectorySync(b.path);
+        return dira == dirb ? a.path.compareTo(b.path) : (dira ? -1 : 1);
+      });
+      return files;
     }
     if (null != directories) {
       /// multi directories
       List<FileSystemEntity> list = <FileSystemEntity>[];
       directories.forEach((FileSystemEntity directory) async {
-        List<FileSystemEntity> tmp = await getEntities(directory, recursive: recursive);
+        List<FileSystemEntity> tmp =
+            await getEntities(directory, recursive: recursive);
         if (null != tmp) {
           list.addAll(tmp);
         }
