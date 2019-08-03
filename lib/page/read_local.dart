@@ -53,6 +53,9 @@ class _ReadPageState extends State<ReadPageLocal>
     await lightEngine.refreshChapterList();
     print('end' + DateTime.now().toString());
     _getChapterData(_curPosition, PageJumpType.stay);
+    if (_curPosition != 0) {
+      //_getChapterData(_curPosition, PageJumpType.firstPage);
+    }
   }
 
   _getChapterData(int position, PageJumpType jumpType) {
@@ -64,7 +67,7 @@ class _ReadPageState extends State<ReadPageLocal>
     } else if (jumpType == PageJumpType.lastPage) {
       _curPage = currentArticle.pageCount - 1;
     }
-    if (jumpType != PageJumpType.stay) {
+    if (jumpType != PageJumpType.stay && pageController.hasClients) {
       pageController.jumpToPage(
           (preArticle != null ? preArticle.pageCount : 0) + _curPage);
     }
@@ -74,7 +77,7 @@ class _ReadPageState extends State<ReadPageLocal>
     });
     if (_curPosition != position) {
       _curPosition = position;
-      //_updateReadProgress();
+      _updateReadProgress();
     }
   }
 
@@ -87,7 +90,7 @@ class _ReadPageState extends State<ReadPageLocal>
     _bookSqlite.getBook(0, path: widget.filePath).then((b) {
       if (b != null) {
         _book = b;
-        _curPosition = _book.position;
+        //_curPosition = _book.position;
       }
       _getChaptersData();
     });
@@ -189,6 +192,7 @@ class _ReadPageState extends State<ReadPageLocal>
       currentArticle = nextArticle;
       nextArticle = lightEngine[currentArticle.nextId];
       _curPage = 0;
+      pageController.jumpToPage(preArticle.pageCount);
       setState(() {});
     } else if (preArticle != null && page <= preArticle.pageCount - 1) {
       print('到达上个章节了');
@@ -197,6 +201,9 @@ class _ReadPageState extends State<ReadPageLocal>
       currentArticle = preArticle;
       preArticle = lightEngine[currentArticle.preId];
       _curPage = currentArticle.pageCount - 1;
+      pageController.jumpToPage(_curPage);
+      if (preArticle != null)
+        pageController.jumpToPage(preArticle.pageCount + _curPage);
       setState(() {});
     }
   }

@@ -7,10 +7,16 @@ import 'package:reader_flutter/page/search.dart';
 import 'package:catcher/catcher_plugin.dart';
 
 void main() {
-  CatcherOptions releaseOptions = CatcherOptions(SilentReportMode(), [
-    ToastHandler()
+  CatcherOptions debugOptions = CatcherOptions(SilentReportMode(), [
+    ConsoleHandler(
+        enableApplicationParameters: false,
+        enableDeviceParameters: false,
+        enableCustomParameters: false,
+        enableStackTrace: true)
   ]);
-  Catcher(MyApp(), releaseConfig: releaseOptions);
+  CatcherOptions releaseOptions =
+      CatcherOptions(SilentReportMode(), [ToastHandler()]);
+  Catcher(MyApp(), debugConfig: debugOptions, releaseConfig: releaseOptions);
 
   SystemUiOverlayStyle systemUiOverlayStyle =
       SystemUiOverlayStyle(statusBarColor: Colors.transparent);

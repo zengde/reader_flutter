@@ -51,6 +51,7 @@ final String columnUpdateTime = 'UpdateTime';
 final String columnPosition = 'Positon';
 final String columnPath = 'Path';
 final String columnCharset = 'Charset';
+final String columnChapterCounts = 'ChapterCounts';
 
 class Book {
   int id;
@@ -67,6 +68,7 @@ class Book {
   String path;
   bool isLocal;
   String charset;
+  int chapterCounts = 0;
 
   static Book fromMap(Map<String, dynamic> map) {
     if (map == null) return null;
@@ -79,6 +81,7 @@ class Book {
     book.bookStatus = map['BookStatus'] ?? "";
     book.lastChapterId = map['LastChapterId'] ?? "";
     book.lastChapter = map['LastChapter'] ?? "";
+    book.chapterCounts = map['ChapterCounts'] ?? 0;
     book.cname = map['CName'] ?? "";
     book.updateTime = map['UpdateTime'] ?? "";
     book.path = map['Path'] ?? "";
@@ -102,6 +105,7 @@ class Book {
     book.bookStatus = "";
     book.lastChapterId = "";
     book.lastChapter = "";
+    book.chapterCounts = map['ChapterCounts'] ?? 0;
     book.cname = map['CategoryName'] ?? "";
     book.updateTime = "";
     book.path = map['Path'] ?? "";
@@ -118,16 +122,23 @@ class Book {
       book.img = 'assets/images/cover_txt.png';
       book.name = getFileBaseName(file);
       book.path = file.path;
-      book.updateTime = new DateFormat('MM/dd/y HH:mm:ss').format(DateTime.now());
+      book.updateTime =
+          new DateFormat('MM/dd/y HH:mm:ss').format(DateTime.now());
       book.isLocal = true;
       if (file is File) {
         book.charset = mcharsetDetector(file.openSync());
-        DateTime last=file.lastModifiedSync();
+        DateTime last = file.lastModifiedSync();
         book.updateTime = new DateFormat('MM/dd/y HH:mm:ss').format(last);
       }
-      print(book.charset);
     }
     return book;
+  }
+
+  String get progress {
+    if (chapterCounts == 0 || position == 0) {
+      return '未读';
+    }
+    return '已读 ' + (position * 100 / chapterCounts).toString() + '%';
   }
 
   Map<String, dynamic> toMap() {
@@ -143,7 +154,8 @@ class Book {
       columnUpdateTime: updateTime,
       columnPosition: position,
       columnPath: path,
-      columnCharset: charset
+      columnCharset: charset,
+      columnChapterCounts: chapterCounts
     };
     if (id != null) {
       map[columnId] = id;
@@ -161,7 +173,7 @@ class BookSqlite {
     String path = join(databasesPath, 'book.db');
 
 //根据数据库文件路径和数据库版本号创建数据库表
-    db = await openDatabase(path, version: 3,
+    db = await openDatabase(path, version: 4,
         onCreate: (Database db, int version) async {
       await db.execute('''
           CREATE TABLE $tableBook (
@@ -173,12 +185,16 @@ class BookSqlite {
             $columnDesc TEXT,
             $columnBookStatus TEXT, 
             $columnLastChapterId TEXT, 
-            $columnLastChapter TEXT, 
+            $columnLastChapter TEXT,
+            $columnChapterCounts INTEGER, 
             $columnCName TEXT,
             $columnUpdateTime TEXT,
             $columnPath TEXT,
             $columnCharset TEXT)
           ''');
+    }, onUpgrade: (Database db, int oldVersion, int newVersion) async {
+      await db
+          .execute("ALTER TABLE $tableBook ADD $columnChapterCounts INTEGER");
     });
   }
 

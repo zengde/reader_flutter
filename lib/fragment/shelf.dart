@@ -107,6 +107,9 @@ class _BookShelfState extends State<BookShelf> {
   Widget bookShelfItemGrid(Book book) {
     var width = (MediaQuery.of(context).size.width - 15 * 2 - 24 * 2) / 3;
     return GestureDetector(
+      onLongPress: () {
+        showAlertDialog(book);
+      },
       onTap: () {
         Navigator.push(context,
             MaterialPageRoute(builder: (BuildContext context) {
@@ -144,7 +147,7 @@ class _BookShelfState extends State<BookShelf> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
             Text(
-              '已读 1%',
+              book.progress,
               style: TextStyle(fontSize: 10, color: Colors.grey),
             ),
             SizedBox(height: 25),
@@ -230,39 +233,45 @@ class _BookShelfState extends State<BookShelf> {
 
   void showAlertDialog(Book book) {
     showDialog(
-        context: context,
-        builder: (_) => new AlertDialog(
-                title: new Text("提示"),
-                content: new Column(
-                  children: <Widget>[
-                    new Text("是否删除 ${book.name}?"),
-                    book.isLocal
-                        ? CheckboxListTile(
-                            title: Text("是否同时删除本地文件?"),
-                            value: true,
-                            onChanged: (val) {},
-                          )
-                        : Container(),
-                  ],
-                ),
-                actions: <Widget>[
-                  new FlatButton(
-                    child: new Text("返回"),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                  new FlatButton(
-                    child: new Text("确定"),
-                    onPressed: () {
-                      setState(() {
-                        bookSqlite.delete(book.id);
-                        Navigator.of(context).pop();
-                        _queryAll(false);
-                      });
-                    },
-                  )
-                ]));
+      context: context,
+      builder: (_) => new AlertDialog(
+        title: new Text("提示"),
+        content: new SingleChildScrollView(
+          child: new Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              new Text("是否删除 ${book.name}?"),
+              book.isLocal
+                  ? CheckboxListTile(
+                      title: Text("同时删除本地文件?"),
+                      value: true,
+                      onChanged: (val) {},
+                    )
+                  : Container(),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          new FlatButton(
+            child: new Text("返回"),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          new FlatButton(
+            child: new Text("确定"),
+            onPressed: () {
+              setState(() {
+                bookSqlite.delete(book.id);
+                Navigator.of(context).pop();
+                _queryAll(false);
+              });
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _onRefresh() async {
