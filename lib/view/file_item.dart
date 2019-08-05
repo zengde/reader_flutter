@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show required;
 import 'package:reader_flutter/util/file_utils.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
 class FileItem extends StatefulWidget {
   FileItem(
@@ -94,6 +95,15 @@ class _FileItemState extends State<FileItem> {
     );
   }
 
+  Widget buildSubTitle() {
+    FileStat stat = widget.file.statSync();
+    if (stat.type == FileSystemEntityType.directory) return null;
+    String size = filesize(stat.size);
+    String time=new DateFormat('MM/dd/y HH:mm:ss').format(stat.modified);
+    String text = '$size | $time';
+    return Text(text);
+  }
+
   @override
   Widget build(BuildContext context) {
     return new DecoratedBox(
@@ -101,17 +111,20 @@ class _FileItemState extends State<FileItem> {
           border: new Border(
               bottom: new BorderSide(color: Colors.grey[200], width: 1.0))),
       child: new ListTile(
-          leading: buildLeading(),
-          title: new Text(
-            getFileName(widget.file),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
-          ),
-          onTap: () => widget.onTap(widget.file),
-          onLongPress: widget.selectMode && trailOffstage
-              ? null
-              : () => widget.onLongPress(widget.file),
-          trailing: buildTailing()),
+        leading: buildLeading(),
+        title: new Text(
+          getFileName(widget.file),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        ),
+        onTap: () => widget.onTap(widget.file),
+        onLongPress: widget.selectMode && trailOffstage
+            ? null
+            : () => widget.onLongPress(widget.file),
+        trailing: buildTailing(),
+        //isThreeLine: !FileSystemEntity.isDirectorySync(widget.file.path),
+        subtitle: buildSubTitle(),
+      ),
     );
   }
 }

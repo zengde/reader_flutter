@@ -25,7 +25,7 @@ class ReaderEngine {
       multiLine: true);
   RegExp chpterExp = RegExp(r'^[\s\t　]*第?[0-9零一二三四五六七八九十序百千]+[章节回话]\s*.{0,20}$',
       unicode: true, multiLine: true);
-  RegExp empty = RegExp(r'^[\s　\t]*$');
+  RegExp empty = RegExp(r'^[\s　\t]*$', unicode: true, multiLine: true);
   File mBookFile;
   Encoding mCharset;
   final ChapterSqlite _chapterSqlite = ChapterSqlite();
@@ -56,9 +56,9 @@ class ReaderEngine {
     mCharset = _book.charset == 'utf8' ? utf8 : gbk_bytes;
   }
 
-  void refreshChapterList() async {
+  refreshChapterList() async {
     if (mChapterList != null) return;
-    
+
     String lastModified =
         new DateFormat('MM/dd/y HH:mm:ss').format(mBookFile.lastModifiedSync());
 
@@ -281,9 +281,9 @@ class ReaderEngine {
       bookStream = mBookFile.openSync(mode: FileMode.read);
       bookStream.setPositionSync(chapter.start);
       int extent = chapter.end - chapter.start;
-      List<int> content = new List<int>(extent);
-      bookStream.readIntoSync(content, 0, extent);
-      return mCharset.decode(content);
+      List<int> contentBuffer = new List<int>(extent);
+      bookStream.readIntoSync(contentBuffer, 0, extent);
+      return mCharset.decode(contentBuffer).replaceAll(empty, '');
     } catch (e) {
       print(e);
     } finally {
