@@ -190,7 +190,8 @@ class _ImportLocalState extends State<ImportLocal> {
         FileType.DIRECTORY != selectedType &&
         selectedList.length > 0) {
       print('import ${selectedList.length} books.');
-      int count = await service.bookService.importLocalBooks(selectedList,bookSqlite);
+      int count =
+          await service.bookService.importLocalBooks(selectedList, bookSqlite);
       print('refresh shelf');
       service.send(['refreshShelf']);
       showDialog<bool>(
@@ -342,6 +343,7 @@ class _ImportLocalState extends State<ImportLocal> {
   void initState() {
     super.initState();
 
+    /// path_provider库自1.1.2开始getExternalStorageDirectory结果为getExternalFilesDir
     getExternalStorageDirectory().then((Directory directory) {
       service.fileService.rootDirectory = directory;
       initial = true;

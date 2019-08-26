@@ -35,7 +35,7 @@ class ReaderView extends StatelessWidget {
         style: TextStyle(
           color: ReaderConfig.instance.textColor,
           height: ReaderConfig.instance.lineHeight,
-          fontSize: ReaderConfig.instance.contentFontSize - 0.5,
+          fontSize: ReaderConfig.instance.contentFontSize,
           letterSpacing: ReaderConfig.instance.letterSpacing,
         ),
       ),

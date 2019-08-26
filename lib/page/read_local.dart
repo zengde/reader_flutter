@@ -12,8 +12,6 @@ import 'reader/reader_menu.dart';
 import 'reader/reader_view.dart';
 import 'reader/reader_engine.dart';
 
-enum PageJumpType { stay, firstPage, lastPage }
-
 class ReadPageLocal extends StatefulWidget {
   @override
   State<StatefulWidget> createState() {
@@ -37,46 +35,38 @@ class _ReadPageState extends State<ReadPageLocal>
 
   int _curPage = 0;
   double topSafeHeight = 0;
-  PageController pageController = PageController(keepPage: false);
-  Chapter currentArticle;
-  Chapter preArticle;
-  Chapter nextArticle;
+
+  int _realPage = 10000;
+  int _realOffset = 0;
+  PageController _controller;
+  int get chapterCount =>
+      lightEngine != null && lightEngine.mChapterList != null
+          ? lightEngine.chapterCount
+          : 0;
+
   final GlobalKey<ScaffoldState> scaffoldKey = new GlobalKey<ScaffoldState>();
   ReaderEngine lightEngine;
+  bool isClose = false;
 
   _getChaptersData() async {
     await Future.delayed(const Duration(milliseconds: 100), () {});
     topSafeHeight = Screen.topSafeHeight;
-    print('start' + DateTime.now().toString());
     lightEngine = new ReaderEngine(
         book: _book, stateSetter: setState, topSafeHeight: topSafeHeight);
     await lightEngine.refreshChapterList();
-    print('end' + DateTime.now().toString());
-    _getChapterData(_curPosition, PageJumpType.stay);
-    if (_curPosition != 0) {
-      //_getChapterData(_curPosition, PageJumpType.firstPage);
-    }
+    _getChapterData(_curPosition);
   }
 
-  _getChapterData(int position, PageJumpType jumpType) {
-    currentArticle = lightEngine[position];
-    preArticle = lightEngine[position - 1];
-    nextArticle = lightEngine[position + 1];
-    if (jumpType == PageJumpType.firstPage) {
-      _curPage = 0;
-    } else if (jumpType == PageJumpType.lastPage) {
-      _curPage = currentArticle.pageCount - 1;
-    }
-    if (jumpType != PageJumpType.stay && pageController.hasClients) {
-      pageController.jumpToPage(
-          (preArticle != null ? preArticle.pageCount : 0) + _curPage);
-    }
+  _getChapterData(int position) {
+    if (isClose) return;
     setState(() {
       print("阅读位置$_curPosition");
-      print("页数${currentArticle.pageCount}");
+      print("页数${curArticle.pageCount}");
     });
     if (_curPosition != position) {
       _curPosition = position;
+      _realOffset = 0;
+      _curPage = 0;
       _updateReadProgress();
     }
   }
@@ -84,13 +74,12 @@ class _ReadPageState extends State<ReadPageLocal>
   @override
   void initState() {
     super.initState();
-    pageController.addListener(onScroll);
 
     /*查询是否已添加*/
     _bookSqlite.getBook(0, path: widget.filePath).then((b) {
       if (b != null) {
         _book = b;
-        //_curPosition = _book.position;
+        _curPosition = _book.position;
       }
       _getChaptersData();
     });
@@ -98,38 +87,30 @@ class _ReadPageState extends State<ReadPageLocal>
 
   @override
   void dispose() {
+    isClose = true;
     _bookSqlite.close();
-    pageController.dispose();
+    _controller?.dispose();
     SystemChrome.setEnabledSystemUIOverlays(
         [SystemUiOverlay.top, SystemUiOverlay.bottom]);
-    lightEngine.close();
+    lightEngine?.close();
     super.dispose();
   }
 
   previousPage() {
-    if (_curPage == 0 && currentArticle.index == 0) {
-      toast('已经是第一页了');
-      return;
-    }
-    pageController.previousPage(
+    _controller.previousPage(
         duration: Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   nextPage() {
-    if (_curPage >= currentArticle.pageCount - 1 &&
-        currentArticle.index == lightEngine.chapterCount - 1) {
-      toast('已经是最后一页了');
-      return;
-    }
-    pageController.nextPage(
+    _controller.nextPage(
         duration: Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   void _updateReadProgress() {
     /*更新阅读进度*/
     _book.position = _curPosition;
-    _book.lastChapter = currentArticle.name;
-    _book.lastChapterId = currentArticle.index.toString();
+    _book.lastChapter = curArticle.name;
+    _book.lastChapterId = curArticle.index.toString();
     _bookSqlite.update(_book).then((ret) {
       if (ret == 1) {
         print("更新阅读进度${_book.position}");
@@ -163,7 +144,7 @@ class _ReadPageState extends State<ReadPageLocal>
       /*目录跳转*/
       print("目录跳转");
       var curPosition = chapter.isHeader ? chapter.headerId : chapter.index;
-      _getChapterData(curPosition, PageJumpType.firstPage);
+      _getChapterData(curPosition);
     }
   }
 
@@ -171,41 +152,74 @@ class _ReadPageState extends State<ReadPageLocal>
     setState(() {
       if (bookMark != null) {
         var curPosition = bookMark.chapterId;
-        _getChapterData(curPosition, PageJumpType.firstPage);
+        _getChapterData(curPosition);
       }
     });
   }
 
-  onPageChanged(int index) {
-    var page = index - (preArticle != null ? preArticle.pageCount : 0);
-    _curPage = page;
+  onPageChanged(int page) {
+    int index = getRealIndex(page);
+    if (index == curArticle.pageCount) {
+      //到达最后一章了
+      if (_curPosition == chapterCount - 1) {
+        previousPage();
+      } else {
+        _realOffset += curArticle.pageCount;
+        _curPosition++;
+      }
+    } else if (index < 0) {
+      //到达第一章了
+      if (_curPosition == 0) {
+        nextPage();
+      } else {
+        _realOffset -= preArticle.pageCount;
+        _curPosition--;
+      }
+    }
+    print(_curPosition);
   }
 
-  onScroll() {
-    var page = pageController.page;
-    var nextArtilePage = currentArticle.pageCount +
-        (preArticle != null ? preArticle.pageCount : 0);
-    if (page >= nextArtilePage) {
-      print('到达下个章节了');
+  Chapter get preArticle {
+    return lightEngine[_curPosition - 1];
+  }
 
-      preArticle = currentArticle;
-      currentArticle = nextArticle;
-      nextArticle = lightEngine[currentArticle.nextId];
-      _curPage = 0;
-      pageController.jumpToPage(preArticle.pageCount);
-      setState(() {});
-    } else if (preArticle != null && page <= preArticle.pageCount - 1) {
-      print('到达上个章节了');
+  Chapter get curArticle {
+    return lightEngine[_curPosition];
+  }
 
-      nextArticle = currentArticle;
-      currentArticle = preArticle;
-      preArticle = lightEngine[currentArticle.preId];
-      _curPage = currentArticle.pageCount - 1;
-      pageController.jumpToPage(_curPage);
-      if (preArticle != null)
-        pageController.jumpToPage(preArticle.pageCount + _curPage);
-      setState(() {});
+  Chapter get nextArticle {
+    return lightEngine[_curPosition + 1];
+  }
+
+  Map<String, dynamic> getRealAricle(int index) {
+    int offset = getRealIndex(index);
+    Map<String, dynamic> res = {};
+    res['chapter'] = curArticle;
+    res['page'] = offset;
+
+    if (offset == curArticle.pageCount) {
+      res['chapter'] = nextArticle;
+      res['page'] = 0;
     }
+    if (offset < 0) {
+      res['chapter'] = preArticle;
+      res['page'] = preArticle == null ? 0 : preArticle.pageCount - 1;
+    }
+    return res;
+  }
+
+  PageController get controller {
+    if (_controller == null) {
+      _controller = PageController(
+        initialPage: _realPage + _curPage,
+      );
+    }
+    return _controller;
+  }
+
+  dynamic getRealIndex(dynamic position) {
+    final dynamic offset = position - _realOffset - _realPage;
+    return offset;
   }
 
   Widget controlContentTextSize() {
@@ -408,36 +422,28 @@ class _ReadPageState extends State<ReadPageLocal>
   }
 
   Widget buildPage(BuildContext context, int index) {
-    var page = index - (preArticle != null ? preArticle.pageCount : 0);
-    var article;
-    if (page >= this.currentArticle.pageCount) {
-      // 到达下一章了
-      article = nextArticle;
-      page = 0;
-    } else if (page < 0) {
-      // 到达上一章了
-      article = preArticle;
-      page = preArticle.pageCount - 1;
-    } else {
-      article = this.currentArticle;
+    var res = getRealAricle(index);
+    print('itemBuilder-' + index.toString());
+
+    if (res['chapter'] == null) {
+      return Container();
     }
     return GestureDetector(
       onTapUp: (TapUpDetails details) {
         onTap(details.globalPosition);
       },
       child: ReaderView(
-          chapter: article, page: page, topSafeHeight: topSafeHeight),
+          chapter: res['chapter'],
+          page: res['page'],
+          topSafeHeight: topSafeHeight),
     );
   }
 
   Widget buildPageView() {
-    int itemCount = (preArticle != null ? preArticle.pageCount : 0) +
-        currentArticle.pageCount +
-        (nextArticle != null ? nextArticle.pageCount : 0);
     return new PageView.builder(
       physics: BouncingScrollPhysics(),
-      controller: pageController,
-      itemCount: itemCount,
+      controller: controller,
+      itemCount: null,
       itemBuilder: buildPage,
       onPageChanged: onPageChanged,
     );
@@ -450,16 +456,16 @@ class _ReadPageState extends State<ReadPageLocal>
     return ReaderMenu(
       book: _book,
       chapters: lightEngine.mChapterList,
-      articleIndex: currentArticle.index,
+      articleIndex: curArticle.index,
       onTap: hideMenu,
       onPreviousArticle: () {
-        _getChapterData(currentArticle.preId, PageJumpType.firstPage);
+        _getChapterData(curArticle.preId);
       },
       onNextArticle: () {
-        _getChapterData(currentArticle.nextId, PageJumpType.firstPage);
+        _getChapterData(curArticle.nextId);
       },
       onToggleChapter: (Chapter chapter) {
-        _getChapterData(chapter.index, PageJumpType.firstPage);
+        _getChapterData(chapter.index);
       },
       onTapMenu: tapMenu,
     );
@@ -496,7 +502,7 @@ class _ReadPageState extends State<ReadPageLocal>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (currentArticle == null) {
+    if (chapterCount == 0) {
       return LoadingPage();
     }
 

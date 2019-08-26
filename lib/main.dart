@@ -15,8 +15,8 @@ void main() {
         enableStackTrace: true)
   ]);
   CatcherOptions releaseOptions =
-      CatcherOptions(SilentReportMode(), [ToastHandler()]);
-  Catcher(MyApp(), debugConfig: debugOptions, releaseConfig: releaseOptions);
+      CatcherOptions(PageReportMode(), [ToastHandler()]);
+  Catcher(MyApp(), debugConfig: debugOptions, releaseConfig: releaseOptions,enableLogger: false);
 
   SystemUiOverlayStyle systemUiOverlayStyle =
       SystemUiOverlayStyle(statusBarColor: Colors.transparent);
