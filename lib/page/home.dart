@@ -58,6 +58,7 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final BottomNavigationBar botNavBar = BottomNavigationBar(
       items: _navigationViews.map((NavigationIconView view) {
         return view.item;

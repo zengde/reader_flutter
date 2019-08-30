@@ -25,6 +25,7 @@ class _BookShelfState extends State<BookShelf> {
 
   @override
   void dispose() {
+    print('dispose');
     bookSqlite.close();
     super.dispose();
   }
@@ -46,6 +47,20 @@ class _BookShelfState extends State<BookShelf> {
     );
   }
 
+  _navigateAndImportLocal(BuildContext context) async {
+    final result = await Navigator.of(context).pushNamed('/importLocal');
+    if (result is bool) {}
+    _queryAll(false);
+  }
+
+  _navigateAndRead(BuildContext context, Book book) async {
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (BuildContext context) {
+      return book.isLocal ? ReadPageLocal(book.path) : ReadPage(book.id);
+    }));
+    _queryAll(false);
+  }
+
   Widget buildShelfItemView(int index) {
     Book book;
     if (index == _books.length) {
@@ -58,7 +73,7 @@ class _BookShelfState extends State<BookShelf> {
       book.lastChapter = '';
       return InkWell(
         onTap: () {
-          Navigator.of(context).pushNamed('/importLocal');
+          _navigateAndImportLocal(context);
         },
         child: bookShelfItem(book),
       );
@@ -69,10 +84,7 @@ class _BookShelfState extends State<BookShelf> {
         showAlertDialog(book);
       },
       onTap: () {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (BuildContext context) {
-          return book.isLocal ? ReadPageLocal(book.path) : ReadPage(book.id);
-        }));
+        _navigateAndRead(context, book);
       },
       highlightColor: Colors.black12,
       child: bookShelfItem(book),
@@ -87,7 +99,7 @@ class _BookShelfState extends State<BookShelf> {
     var width = (MediaQuery.of(context).size.width - 15 * 2 - 24 * 2) / 3;
     children.add(GestureDetector(
       onTap: () {
-        Navigator.of(context).pushNamed('/importLocal');
+        _navigateAndImportLocal(context);
       },
       child: Container(
         width: width,
@@ -111,10 +123,7 @@ class _BookShelfState extends State<BookShelf> {
         showAlertDialog(book);
       },
       onTap: () {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (BuildContext context) {
-          return book.isLocal ? ReadPageLocal(book.path) : ReadPage(book.id);
-        }));
+        _navigateAndRead(context, book);
       },
       child: Container(
         width: width,
@@ -347,7 +356,7 @@ class _BookShelfState extends State<BookShelf> {
               );
               switch (result) {
                 case '/import':
-                  Navigator.of(context).pushNamed('/importLocal');
+                  _navigateAndImportLocal(context);
                   break;
                 case '/style':
                   setState(() {

@@ -15,6 +15,7 @@ final String columnStart = 'start';
 final String columnEnd = 'end';
 final String columnIndex = 'orderss';
 final String columnBookId = 'bookid';
+final String columnBookHash = 'md5';
 
 class Volume {
   String name;
@@ -46,6 +47,7 @@ class Chapter extends AdsorptionData {
   int end;
   int index;
   int bookid;
+  String bookhash;
 
   Chapter({this.name, this.isHeader = false, this.headerId});
 
@@ -62,6 +64,7 @@ class Chapter extends AdsorptionData {
     listBean.end = map['end'] ?? 0;
     listBean.content = map['content'] ?? '';
     listBean.bookid = map['bookid'] ?? 0;
+    listBean.bookhash = map['bookhash'] ?? '';
     return listBean;
   }
 
@@ -96,7 +99,8 @@ class Chapter extends AdsorptionData {
       columnStart: start,
       columnEnd: end,
       columnIndex: index,
-      columnBookId: bookid
+      columnBookId: bookid,
+      columnBookHash: bookhash
     };
     if (id != null) {
       map[columnId] = id;
@@ -114,7 +118,7 @@ class ChapterSqlite {
     String path = join(databasesPath, 'chapter.db');
 
 //根据数据库文件路径和数据库版本号创建数据库表
-    db = await openDatabase(path, version: 5,
+    db = await openDatabase(path, version: 6,
         onCreate: (Database db, int version) async {
       await db.execute('''
           CREATE TABLE $tableBook (
@@ -127,10 +131,14 @@ class ChapterSqlite {
             $columnStart INTEGER, 
             $columnEnd INTEGER,
             $columnIndex INTEGER,
-            $columnBookId INTEGER)
+            $columnBookId INTEGER,
+            $columnBookHash TEXT)
           ''');
-    }, onUpgrade: (Database db, int oldVersion,int newVersion) async {
-      await db.execute("ALTER TABLE $tableBook ADD $columnBookId INTEGER");
+    }, onUpgrade: (Database db, int oldVersion, int newVersion) async {
+      if (oldVersion == 4)
+        await db.execute("ALTER TABLE $tableBook ADD $columnBookId INTEGER");
+      if (oldVersion == 5)
+        await db.execute("ALTER TABLE $tableBook ADD $columnBookHash TEXT");
     });
   }
 
@@ -145,6 +153,21 @@ class ChapterSqlite {
     Map<int, Chapter> map = chapters.asMap();
     map.forEach((index, chapter) {
       chapter.bookid = bookid;
+      chapter.index = index;
+      batch.insert(tableBook, chapter.toMap());
+    });
+    var results = await batch.commit();
+    return results.length;
+  }
+
+  Future<int> insertAllWithHash(
+      List<Chapter> chapters, int bookid, String md5) async {
+    await this.openSqlite();
+    Batch batch = db.batch();
+    Map<int, Chapter> map = chapters.asMap();
+    map.forEach((index, chapter) {
+      chapter.bookid = bookid;
+      chapter.bookhash = md5;
       chapter.index = index;
       batch.insert(tableBook, chapter.toMap());
     });
@@ -181,6 +204,35 @@ class ChapterSqlite {
     return books;
   }
 
+  Future<List<Chapter>> queryAllByHash(String md5) async {
+    await this.openSqlite();
+    List<Map> maps = await db.query(tableBook,
+        columns: [
+          columnId,
+          columnName,
+          columnHasContent,
+          columnIsHeader,
+          columnHeaderId,
+          columnContent,
+          columnStart,
+          columnEnd,
+          columnIndex,
+          columnBookId
+        ],
+        where: '$columnBookHash = ?',
+        whereArgs: [md5]);
+
+    if (maps == null || maps.length == 0) {
+      return null;
+    }
+
+    List<Chapter> books = [];
+    for (int i = 0; i < maps.length; i++) {
+      books.add(Chapter.fromMap(maps[i]));
+    }
+    return books;
+  }
+
   Future<Chapter> getChapter(int id) async {
     await this.openSqlite();
     List<Map> maps = await db.query(tableBook,
@@ -203,10 +255,17 @@ class ChapterSqlite {
     return null;
   }
 
-  // 根据ID删除书籍信息
+  /// 根据ID删除章节信息
   Future<int> delete(int id) async {
     await this.openSqlite();
     return await db.delete(tableBook, where: '$columnId = ?', whereArgs: [id]);
+  }
+
+  /// 根据书籍ID删除章节信息
+  Future<int> deleteByBook(int bookid) async {
+    await this.openSqlite();
+    return await db
+        .delete(tableBook, where: '$columnBookId = ?', whereArgs: [bookid]);
   }
 
   // 更新书籍信息

@@ -213,7 +213,7 @@ class _ImportLocalState extends State<ImportLocal> {
                         })
                   ])).then<void>((value) {
         if (value) {
-          Navigator.pop(context);
+          Navigator.pop(context,true);
         } else {
 //          handleCancleSelect();
         }

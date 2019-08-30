@@ -157,6 +157,12 @@ class BookMarkSqlite {
         where: '$columnId = ? and $columnBookId=?', whereArgs: [id, bookid]);
   }
 
+  Future<int> deleteByBook(int bookid) async {
+    await this.openSqlite();
+    return await db
+        .delete(tableBookMark, where: '$columnBookId=?', whereArgs: [bookid]);
+  }
+
   // 记得及时关闭数据库，防止内存泄漏
   close() async {
     await db.close();
